@@ -6,19 +6,23 @@ import { drizzleAdapter } from "@better-auth/drizzle-adapter";
 import { admin as adminPlugin } from "better-auth/plugins";
 import { nextCookies } from "better-auth/next-js";
 
-import { db } from "../db/index.js";
+import { db, schema } from "../db/index.js";
 
 import {
   ac,
   roleDefinitions,
 } from "./auth/permissions.js";
 
-if (!process.env.BETTER_AUTH_SECRET) {
-  throw new Error("BETTER_AUTH_SECRET is missing from .env");
-}
+const requiredVariables = [
+  "DATABASE_URL",
+  "BETTER_AUTH_SECRET",
+  "BETTER_AUTH_URL",
+];
 
-if (!process.env.BETTER_AUTH_URL) {
-  throw new Error("BETTER_AUTH_URL is missing from .env");
+for (const variable of requiredVariables) {
+  if (!process.env[variable]) {
+    throw new Error(`${variable} is missing from .env`);
+  }
 }
 
 export const auth = betterAuth({
@@ -34,6 +38,7 @@ export const auth = betterAuth({
 
   database: drizzleAdapter(db, {
     provider: "pg",
+    schema,
   }),
 
   emailAndPassword: {

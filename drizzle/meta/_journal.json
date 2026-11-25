@@ -15,6 +15,13 @@
       "when": 1795602766230,
       "tag": "0001_naive_machine_man",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1795634821367,
+      "tag": "0002_illegal_stellaris",
+      "breakpoints": true
     }
   ]
 }
