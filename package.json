@@ -9,14 +9,24 @@
     "lint": "eslint"
   },
   "dependencies": {
+    "dotenv": "^18.0.10",
+    "drizzle-orm": "^0.45.4",
+    "lucide-react": "^1.66.0",
     "next": "16.4.6",
+    "pg": "^8.23.1",
     "react": "19.3.0",
     "react-dom": "19.3.0"
   },
   "devDependencies": {
     "@tailwindcss/turbopack": "4.3.3",
+    "drizzle-kit": "^0.31.11",
     "eslint": "^9",
     "eslint-config-next": "16.4.6",
     "tailwindcss": "4.3.3"
+  },
+  "overrides": {
+  "@esbuild-kit/core-utils": {
+    "esbuild": "0.28.2"
   }
+}
 }
