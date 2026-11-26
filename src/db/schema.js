@@ -9,7 +9,7 @@ import {
   index,
   uniqueIndex,
   boolean,
-    integer,
+  integer,
   jsonb,
   date,
 } from "drizzle-orm/pg-core";
@@ -667,6 +667,24 @@ export const students = pgTable(
 
     dateOfBirth: date("date_of_birth"),
 
+        gender: varchar("gender", { length: 20 }),
+
+    bloodGroup: varchar("blood_group", { length: 5 }),
+
+    religion: varchar("religion", { length: 50 }),
+
+    photoUrl: text("photo_url"),
+
+    previousSchool: varchar("previous_school", {
+      length: 200,
+    }),
+
+    previousClass: varchar("previous_class", {
+      length: 50,
+    }),
+
+    admissionDate: date("admission_date"),
+
     status: studentStatusEnum("status")
       .notNull()
       .default("active"),
@@ -762,6 +780,145 @@ export const studentEnrollments = pgTable(
     ).on(table.academicYear),
   })
 );
+
+// =====================================================
+// STUDENT GUARDIANS
+// =====================================================
+
+export const studentGuardians = pgTable(
+  "student_guardians",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    studentId: uuid("student_id")
+      .notNull()
+      .unique()
+      .references(() => students.id, {
+        onDelete: "cascade",
+      }),
+
+    fatherName: varchar("father_name", { length: 150 }),
+
+    fatherPhone: varchar("father_phone", { length: 30 }),
+
+    fatherOccupation: varchar("father_occupation", {
+      length: 100,
+    }),
+
+    motherName: varchar("mother_name", { length: 150 }),
+
+    motherPhone: varchar("mother_phone", { length: 30 }),
+
+    motherOccupation: varchar("mother_occupation", {
+      length: 100,
+    }),
+
+    guardianName: varchar("guardian_name", { length: 150 }),
+
+    guardianRelationship: varchar("guardian_relationship", {
+      length: 50,
+    }),
+
+    guardianPhone: varchar("guardian_phone", { length: 30 }),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  }
+);
+
+// =====================================================
+// STUDENT ADDRESSES
+// =====================================================
+
+export const studentAddresses = pgTable(
+  "student_addresses",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    studentId: uuid("student_id")
+      .notNull()
+      .unique()
+      .references(() => students.id, {
+        onDelete: "cascade",
+      }),
+
+    village: varchar("village", { length: 150 }),
+
+    postOffice: varchar("post_office", { length: 150 }),
+
+    postalCode: varchar("postal_code", { length: 20 }),
+
+    unionName: varchar("union_name", { length: 150 }),
+
+    upazila: varchar("upazila", { length: 150 }),
+
+    district: varchar("district", { length: 150 }),
+
+    presentAddress: text("present_address"),
+
+    permanentAddress: text("permanent_address"),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  }
+);
+
+// =====================================================
+// STUDENT EMERGENCY CONTACTS
+// =====================================================
+
+export const studentEmergencyContacts = pgTable(
+  "student_emergency_contacts",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, {
+        onDelete: "cascade",
+      }),
+
+    contactName: varchar("contact_name", {
+      length: 150,
+    }).notNull(),
+
+    relationship: varchar("relationship", {
+      length: 50,
+    }),
+
+    phone: varchar("phone", { length: 30 }).notNull(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    studentIndex: index(
+      "student_emergency_contacts_student_idx"
+    ).on(table.studentId),
+  })
+);
+
 
 // =====================================================
 // 14. ATTENDANCE SESSIONS

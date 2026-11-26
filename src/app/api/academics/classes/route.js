@@ -20,7 +20,11 @@ export async function GET(request) {
       return access.response;
     }
 
-    if (!["superAdmin", "principal"].includes(access.user.role)) {
+    if (
+  !["superAdmin", "principal", "teacher", "accountant"].includes(
+    access.user.role
+  )
+) {
       return Response.json(
         {
           success: false,

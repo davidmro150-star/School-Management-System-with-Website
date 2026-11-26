@@ -1,23 +1,24 @@
 
-import { eq, asc } from "drizzle-orm";
+import { and, eq, asc } from "drizzle-orm";
 
 import { db } from "@/db";
 
 import {
   schoolClasses,
   classSections,
+  teacherAssignments,
 } from "@/db/schema";
 
 import { requirePermission } from "@/lib/auth/require-permission";
 
 export const runtime = "nodejs";
 
-// GET: Retrieve classes with their sections.
 export async function GET(request) {
   try {
+    // 1. Verify authentication and attendance permission.
     const access = await requirePermission(
       request,
-      "academics",
+      "attendance",
       "read"
     );
 
@@ -25,37 +26,107 @@ export async function GET(request) {
       return access.response;
     }
 
-    if (!["superAdmin", "principal"].includes(access.user.role)) {
+    const { user } = access;
+
+    if (!["superAdmin", "principal", "teacher"].includes(user.role)) {
       return Response.json(
         {
           success: false,
-          message: "You do not have permission to manage classes.",
+          message: "You do not have permission to access attendance classes.",
         },
         { status: 403 }
       );
     }
 
-    const rows = await db
-      .select({
-        id: schoolClasses.id,
-        name: schoolClasses.name,
-        numericOrder: schoolClasses.numericOrder,
-        isActive: schoolClasses.isActive,
-        sectionId: classSections.id,
-        sectionName: classSections.name,
-        capacity: classSections.capacity,
-        sectionIsActive: classSections.isActive,
-      })
-      .from(schoolClasses)
-      .leftJoin(
-        classSections,
-        eq(schoolClasses.id, classSections.classId)
-      )
-      .orderBy(
-        asc(schoolClasses.numericOrder),
-        asc(classSections.name)
-      );
+    // 2. Read academic year.
+    const { searchParams } = new URL(request.url);
+    const academicYear = searchParams.get("academicYear");
 
+    if (
+      user.role === "teacher" &&
+      (!academicYear ||
+        academicYear.length > 20 ||
+        !/^\d{4}(-\d{4})?$/.test(academicYear))
+    ) {
+      return Response.json(
+        {
+          success: false,
+          message: "A valid academic year is required.",
+        },
+        { status: 400 }
+      );
+    }
+
+    // 3. Retrieve active classes and sections.
+    let rows;
+
+    if (user.role === "teacher") {
+      // Teachers can only see sections assigned to them.
+      rows = await db
+        .select({
+          id: schoolClasses.id,
+          name: schoolClasses.name,
+          numericOrder: schoolClasses.numericOrder,
+          isActive: schoolClasses.isActive,
+          sectionId: classSections.id,
+          sectionName: classSections.name,
+          capacity: classSections.capacity,
+          sectionIsActive: classSections.isActive,
+        })
+        .from(schoolClasses)
+        .innerJoin(
+          classSections,
+          and(
+            eq(classSections.classId, schoolClasses.id),
+            eq(classSections.isActive, true)
+          )
+        )
+        .innerJoin(
+          teacherAssignments,
+          and(
+            eq(
+              teacherAssignments.classSectionId,
+              classSections.id
+            ),
+            eq(teacherAssignments.teacherUserId, user.id),
+            eq(teacherAssignments.academicYear, academicYear),
+            eq(teacherAssignments.isActive, true)
+          )
+        )
+        .where(eq(schoolClasses.isActive, true))
+        .orderBy(
+          asc(schoolClasses.numericOrder),
+          asc(classSections.name)
+        );
+    } else {
+      // Administrators can see every active class and section.
+      rows = await db
+        .select({
+          id: schoolClasses.id,
+          name: schoolClasses.name,
+          numericOrder: schoolClasses.numericOrder,
+          isActive: schoolClasses.isActive,
+          sectionId: classSections.id,
+          sectionName: classSections.name,
+          capacity: classSections.capacity,
+          sectionIsActive: classSections.isActive,
+        })
+        .from(schoolClasses)
+        .leftJoin(
+          classSections,
+          and(
+            eq(classSections.classId, schoolClasses.id),
+            eq(classSections.isActive, true)
+          )
+        )
+        .where(eq(schoolClasses.isActive, true))
+        .orderBy(
+          asc(schoolClasses.numericOrder),
+          asc(classSections.name)
+        );
+    }
+
+    // 4. Group sections under their respective classes.
     const classMap = new Map();
 
     for (const row of rows) {
@@ -84,109 +155,12 @@ export async function GET(request) {
       data: [...classMap.values()],
     });
   } catch (error) {
-    console.error("Get classes error:", error);
+    console.error("Get attendance classes error:", error);
 
     return Response.json(
       {
         success: false,
-        message: "Unable to load classes.",
-      },
-      { status: 500 }
-    );
-  }
-}
-
-// POST: Create a class.
-export async function POST(request) {
-  try {
-    const access = await requirePermission(
-      request,
-      "academics",
-      "create"
-    );
-
-    if (!access.authorized) {
-      return access.response;
-    }
-
-    if (!["superAdmin", "principal"].includes(access.user.role)) {
-      return Response.json(
-        {
-          success: false,
-          message: "You do not have permission to create classes.",
-        },
-        { status: 403 }
-      );
-    }
-
-    const body = await request.json();
-    const numericOrder = Number(body.numericOrder);
-
-    if (
-      !Number.isInteger(numericOrder) ||
-      numericOrder < 6 ||
-      numericOrder > 10
-    ) {
-      return Response.json(
-        {
-          success: false,
-          message: "Only Class 6 to Class 10 can be created.",
-        },
-        { status: 400 }
-      );
-    }
-
-    const name = `Class ${numericOrder}`;
-
-    const [existingClass] = await db
-      .select({ id: schoolClasses.id })
-      .from(schoolClasses)
-      .where(eq(schoolClasses.name, name))
-      .limit(1);
-
-    if (existingClass) {
-      return Response.json(
-        {
-          success: false,
-          message: `${name} already exists.`,
-        },
-        { status: 409 }
-      );
-    }
-
-    const [newClass] = await db
-      .insert(schoolClasses)
-      .values({
-        name,
-        numericOrder,
-      })
-      .returning();
-
-    return Response.json(
-      {
-        success: true,
-        message: `${name} created successfully.`,
-        data: newClass,
-      },
-      { status: 201 }
-    );
-  } catch (error) {
-    console.error("Create class error:", error);
-
-    if (error.code === "23505") {
-      return Response.json(
-        {
-          success: false,
-          message: "This class already exists.",
-        },
-        { status: 409 }
-      );
-    }
-
-    return Response.json(
-      {
-        success: false,
-        message: "Unable to create class.",
+        message: "Unable to load attendance classes.",
       },
       { status: 500 }
     );

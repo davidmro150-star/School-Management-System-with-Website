@@ -475,11 +475,30 @@ function Sidebar({ mobileOpen, closeSidebar, user, navigation }) {
               <div className="space-y-1">
                 {group.items.map((item) => {
 
-                  const Icon = item.icon;
+              
+const Icon = item.icon;
 
-                  if (item.active) {
+// Student Management
+   if (
+  ["Students", "My Students"].includes(item.label) &&
+  ["superAdmin", "principal", "teacher", "accountant"].includes(user?.role)
+) {
+  return (
+    <a
+      key={item.label}
+      href="/admin/students"
+      onClick={closeSidebar}
+      className="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
+    >
+      <Icon size={18} className="shrink-0 text-slate-400" />
+      <span>{item.label}</span>
+      <ChevronRight size={15} className="ml-auto text-slate-500 transition group-hover:text-blue-300" />
+    </a>
+  );
+}
 
-                    if (
+// Attendance
+if (
   item.label === "Attendance" &&
   ["superAdmin", "principal", "teacher"].includes(user?.role)
 ) {
@@ -492,30 +511,28 @@ function Sidebar({ mobileOpen, closeSidebar, user, navigation }) {
     >
       <Icon size={18} className="shrink-0 text-slate-400" />
       <span>{item.label}</span>
-      <ChevronRight
-        size={15}
-        className="ml-auto text-slate-500 transition group-hover:text-blue-300"
-      />
+      <ChevronRight size={15} className="ml-auto text-slate-500 transition group-hover:text-blue-300" />
     </a>
   );
 }
-                    return (
-                      <a
-                        key={item.label}
-                        href="/admin/dashboard"
-                        onClick={closeSidebar}
-                        aria-current="page"
-                        className="group flex items-center gap-3 rounded-xl border border-blue-400/15 bg-blue-500/15 px-3.5 py-3 text-[13px] font-semibold text-white shadow-sm"
-                      >
-                        <Icon size={18} className="text-blue-300" />
-                        <span>{item.label}</span>
-                        <ChevronRight
-                          size={15}
-                          className="ml-auto text-blue-300"
-                        />
-                      </a>
-                    );
-                  }
+
+// Active Dashboard
+if (item.active) {
+  return (
+    <a
+      key={item.label}
+      href="/admin/dashboard"
+      onClick={closeSidebar}
+      aria-current="page"
+      className="group flex items-center gap-3 rounded-xl border border-blue-400/15 bg-blue-500/15 px-3.5 py-3 text-[13px] font-semibold text-white shadow-sm"
+    >
+      <Icon size={18} className="text-blue-300" />
+      <span>{item.label}</span>
+      <ChevronRight size={15} className="ml-auto text-blue-300" />
+    </a>
+  );
+    }
+
 
                   return (
                     <div

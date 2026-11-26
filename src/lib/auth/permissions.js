@@ -37,15 +37,15 @@ export const rolePermissionMap = {
     ])
   ),
 
-  // 2. Principal: Academic leadership and school oversight.
+  // 2. Principal: School leadership and student management.
   principal: {
     dashboard: ["read"],
-    students: ["read", "update", "export"],
+    students: ["create", "read", "update", "export"],
     guardians: ["read"],
     admissions: ["read", "approve", "reject"],
     staff: ["read"],
     academics: ["create", "read", "update", "assign"],
-    attendance: ["read", "correct", "export"],
+    attendance: ["mark", "read", "correct", "export"],
     fees: ["read"],
     examinations: ["create", "read", "update", "publish"],
     results: ["create", "read", "update", "publish", "export"],
@@ -54,10 +54,10 @@ export const rolePermissionMap = {
     reports: ["read", "export"],
   },
 
-  // 3. Teacher: Teaching and assigned student management.
+  // 3. Teacher: Student registration and assigned student access.
   teacher: {
     dashboard: ["read"],
-    students: ["read"],
+    students: ["create", "read"],
     academics: ["read"],
     attendance: ["mark", "read"],
     examinations: ["read"],
@@ -66,7 +66,7 @@ export const rolePermissionMap = {
     library: ["read"],
   },
 
-  // 4. Student: Own academic information.
+  // 4. Student: Own academic information only.
   student: {
     dashboard: ["read"],
     academics: ["read"],
@@ -77,13 +77,14 @@ export const rolePermissionMap = {
     library: ["read"],
   },
 
-  // 5. Accountant: Financial management.
-  accountant: {
-    dashboard: ["read"],
-    students: ["read"],
-    fees: [...statement.fees],
-    reports: ["read", "export"],
-  },
+  // 5. Accountant: Student records and financial management.
+ accountant: {
+  dashboard: ["read"],
+  students: ["create", "read"],
+  academics: ["read"],
+  fees: [...statement.fees],
+  reports: ["read", "export"],
+},
 };
 
 // Convert permission definitions into Better Auth roles.
