@@ -9,8 +9,9 @@ import {
   index,
   uniqueIndex,
   boolean,
-  integer,
+    integer,
   jsonb,
+  date,
 } from "drizzle-orm/pg-core";
 
 // =====================================================
@@ -46,6 +47,27 @@ export const galleryAlbumStatusEnum = pgEnum(
   ["draft", "published", "archived"]
 );
 
+// =====================================================
+// ATTENDANCE ENUMS
+// =====================================================
+
+export const studentStatusEnum = pgEnum("student_status", [
+  "active",
+  "inactive",
+  "graduated",
+]);
+
+export const attendanceStatusEnum = pgEnum("attendance_status", [
+  "present",
+  "absent",
+  "late",
+  "excused",
+]);
+
+export const attendanceSessionStatusEnum = pgEnum(
+  "attendance_session_status",
+  ["draft", "submitted"]
+);
 // =====================================================
 // 1. WEBSITE PAGES
 // =====================================================
@@ -537,3 +559,398 @@ export const contentRevisions = pgTable(
     ).on(table.pageId, table.revisionNumber),
   })
 );
+
+// =====================================================
+// 10. SCHOOL CLASSES
+// =====================================================
+
+export const schoolClasses = pgTable(
+  "school_classes",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    name: varchar("name", { length: 100 }).notNull(),
+
+    numericOrder: integer("numeric_order").notNull().default(0),
+
+    isActive: boolean("is_active").notNull().default(true),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    nameUnique: uniqueIndex("school_classes_name_unique").on(
+      table.name
+    ),
+  })
+);
+
+// =====================================================
+// 11. CLASS SECTIONS
+// =====================================================
+
+export const classSections = pgTable(
+  "class_sections",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    classId: uuid("class_id")
+      .notNull()
+      .references(() => schoolClasses.id, {
+        onDelete: "restrict",
+      }),
+
+    name: varchar("name", { length: 50 }).notNull(),
+
+    capacity: integer("capacity").notNull().default(50),
+
+    isActive: boolean("is_active").notNull().default(true),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    classSectionUnique: uniqueIndex(
+      "class_sections_class_name_unique"
+    ).on(table.classId, table.name),
+
+    classIndex: index("class_sections_class_idx").on(
+      table.classId
+    ),
+  })
+);
+
+// =====================================================
+// 12. STUDENTS
+// =====================================================
+
+export const students = pgTable(
+  "students",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    admissionNumber: varchar("admission_number", {
+      length: 50,
+    })
+      .notNull()
+      .unique(),
+
+    firstName: varchar("first_name", {
+      length: 100,
+    }).notNull(),
+
+    lastName: varchar("last_name", {
+      length: 100,
+    }),
+
+    email: varchar("email", { length: 255 }),
+
+    phone: varchar("phone", { length: 30 }),
+
+    dateOfBirth: date("date_of_birth"),
+
+    status: studentStatusEnum("status")
+      .notNull()
+      .default("active"),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    deletedAt: timestamp("deleted_at", {
+      withTimezone: true,
+    }),
+  },
+  (table) => ({
+    statusIndex: index("students_status_idx").on(
+      table.status
+    ),
+
+    nameIndex: index("students_name_idx").on(
+      table.firstName,
+      table.lastName
+    ),
+  })
+);
+
+// =====================================================
+// 13. STUDENT CLASS ENROLLMENTS
+// =====================================================
+
+export const studentEnrollments = pgTable(
+  "student_enrollments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, {
+        onDelete: "restrict",
+      }),
+
+    classSectionId: uuid("class_section_id")
+      .notNull()
+      .references(() => classSections.id, {
+        onDelete: "restrict",
+      }),
+
+    academicYear: varchar("academic_year", {
+      length: 20,
+    }).notNull(),
+
+    rollNumber: varchar("roll_number", {
+      length: 30,
+    }),
+
+    isActive: boolean("is_active").notNull().default(true),
+
+    enrolledAt: timestamp("enrolled_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    studentYearUnique: uniqueIndex(
+      "student_enrollments_student_year_unique"
+    ).on(table.studentId, table.academicYear),
+
+    sectionIndex: index(
+      "student_enrollments_section_idx"
+    ).on(table.classSectionId, table.isActive),
+
+    academicYearIndex: index(
+      "student_enrollments_year_idx"
+    ).on(table.academicYear),
+  })
+);
+
+// =====================================================
+// 14. ATTENDANCE SESSIONS
+// =====================================================
+
+export const attendanceSessions = pgTable(
+  "attendance_sessions",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    classSectionId: uuid("class_section_id")
+      .notNull()
+      .references(() => classSections.id, {
+        onDelete: "restrict",
+      }),
+
+    sessionDate: date("session_date").notNull(),
+
+    academicYear: varchar("academic_year", {
+      length: 20,
+    }).notNull(),
+
+    status: attendanceSessionStatusEnum("status")
+      .notNull()
+      .default("draft"),
+
+    // Better Auth user ID of the teacher or administrator.
+    // Authorization will be checked on the server.
+    markedByUserId: varchar("marked_by_user_id", {
+      length: 255,
+    }),
+
+    submittedAt: timestamp("submitted_at", {
+      withTimezone: true,
+    }),
+
+    notes: text("notes"),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    classDateUnique: uniqueIndex(
+      "attendance_sessions_class_date_unique"
+    ).on(table.classSectionId, table.sessionDate),
+
+    dateIndex: index("attendance_sessions_date_idx").on(
+      table.sessionDate
+    ),
+
+    statusIndex: index("attendance_sessions_status_idx").on(
+      table.status
+    ),
+  })
+);
+
+// =====================================================
+// 15. ATTENDANCE RECORDS
+// =====================================================
+
+export const attendanceRecords = pgTable(
+  "attendance_records",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    sessionId: uuid("session_id")
+      .notNull()
+      .references(() => attendanceSessions.id, {
+        onDelete: "cascade",
+      }),
+
+    studentId: uuid("student_id")
+      .notNull()
+      .references(() => students.id, {
+        onDelete: "restrict",
+      }),
+
+    status: attendanceStatusEnum("status").notNull(),
+
+    remarks: varchar("remarks", {
+      length: 500,
+    }),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    sessionStudentUnique: uniqueIndex(
+      "attendance_records_session_student_unique"
+    ).on(table.sessionId, table.studentId),
+
+    sessionIndex: index(
+      "attendance_records_session_idx"
+    ).on(table.sessionId),
+
+    studentIndex: index(
+      "attendance_records_student_idx"
+    ).on(table.studentId),
+
+    statusIndex: index(
+      "attendance_records_status_idx"
+    ).on(table.status),
+  })
+);
+
+
+ 
+// =====================================================
+// 16. TEACHER CLASS ASSIGNMENTS
+// =====================================================
+
+export const teacherAssignments = pgTable(
+  "teacher_assignments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    // Better Auth user ID of the assigned teacher.
+    teacherUserId: varchar("teacher_user_id", {
+      length: 255,
+    }).notNull(),
+
+    classSectionId: uuid("class_section_id")
+      .notNull()
+      .references(() => classSections.id, {
+        onDelete: "restrict",
+      }),
+
+    academicYear: varchar("academic_year", {
+      length: 20,
+    }).notNull(),
+
+    isActive: boolean("is_active").notNull().default(true),
+
+    assignedAt: timestamp("assigned_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    teacherSectionYearUnique: uniqueIndex(
+      "teacher_assignments_teacher_section_year_unique"
+    ).on(
+      table.teacherUserId,
+      table.classSectionId,
+      table.academicYear
+    ),
+
+    teacherIndex: index(
+      "teacher_assignments_teacher_idx"
+    ).on(table.teacherUserId, table.isActive),
+
+    sectionIndex: index(
+      "teacher_assignments_section_idx"
+    ).on(table.classSectionId, table.isActive),
+
+    academicYearIndex: index(
+      "teacher_assignments_year_idx"
+    ).on(table.academicYear),
+  })
+);
+

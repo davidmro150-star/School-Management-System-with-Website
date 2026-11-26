@@ -1,7 +1,7 @@
-
 "use client";
 
-import { useMemo, useState } from "react";
+import { useState } from "react";
+import { useSession } from "@/lib/auth-client";
 import {
   Activity,
   ArrowDownRight,
@@ -37,54 +37,189 @@ import {
 } from "lucide-react";
 
 /* -------------------------------------------------------
+   ROLE-BASED NAVIGATION
+------------------------------------------------------- */
+
+const navigationByRole = {
+  superAdmin: [
+    { title: "OVERVIEW", items: [{ label: "Dashboard", icon: LayoutDashboard, active: true }] },
+    {
+      title: "PEOPLE MANAGEMENT",
+      items: [
+        { label: "Students", icon: Users },
+        { label: "Admissions", icon: UserPlus },
+        { label: "Teachers & Staff", icon: GraduationCap },
+      ],
+    },
+    {
+      title: "ACADEMICS",
+      items: [
+        { label: "Classes & Sections", icon: School },
+        { label: "Subjects", icon: BookOpen },
+        { label: "Attendance", icon: ClipboardCheck },
+        { label: "Examinations", icon: FileText },
+        { label: "Results & Grades", icon: Receipt },
+        { label: "Class Timetable", icon: CalendarDays },
+      ],
+    },
+    {
+      title: "FINANCE",
+      items: [
+        { label: "Fees & Payments", icon: Wallet },
+        { label: "Accounting", icon: CreditCard },
+        { label: "Financial Reports", icon: Activity },
+      ],
+    },
+    {
+      title: "SCHOOL SERVICES",
+      items: [
+        { label: "Library", icon: Library },
+        { label: "Transport", icon: Bus },
+        { label: "Communication", icon: MessageSquare },
+      ],
+    },
+    {
+      title: "WEBSITE MANAGEMENT",
+      items: [{ label: "Website CMS", icon: Settings }],
+    },
+  ],
+
+  principal: [
+    { title: "OVERVIEW", items: [{ label: "Dashboard", icon: LayoutDashboard, active: true }] },
+    {
+      title: "PEOPLE MANAGEMENT",
+      items: [
+        { label: "Students", icon: Users },
+        { label: "Admissions", icon: UserPlus },
+        { label: "Teachers & Staff", icon: GraduationCap },
+      ],
+    },
+    {
+      title: "ACADEMICS",
+      items: [
+        { label: "Classes & Sections", icon: School },
+        { label: "Subjects", icon: BookOpen },
+        { label: "Attendance", icon: ClipboardCheck },
+        { label: "Examinations", icon: FileText },
+        { label: "Results & Grades", icon: Receipt },
+        { label: "Class Timetable", icon: CalendarDays },
+      ],
+    },
+    {
+      title: "REPORTS & SERVICES",
+      items: [
+        { label: "Financial Reports", icon: Activity },
+        { label: "Communication", icon: MessageSquare },
+      ],
+    },
+    {
+      title: "WEBSITE MANAGEMENT",
+      items: [{ label: "Website CMS", icon: Settings }],
+    },
+  ],
+
+  teacher: [
+    { title: "OVERVIEW", items: [{ label: "Dashboard", icon: LayoutDashboard, active: true }] },
+    {
+      title: "MY TEACHING",
+      items: [
+        { label: "My Classes", icon: School },
+        { label: "My Students", icon: Users },
+        { label: "Attendance", icon: ClipboardCheck },
+        { label: "Class Timetable", icon: CalendarDays },
+      ],
+    },
+    {
+      title: "ASSESSMENTS",
+      items: [
+        { label: "Examinations", icon: FileText },
+        { label: "Results & Grades", icon: Receipt },
+      ],
+    },
+    {
+      title: "COMMUNICATION",
+      items: [{ label: "Communication", icon: MessageSquare }],
+    },
+  ],
+
+  student: [
+    { title: "MY SCHOOL", items: [{ label: "Dashboard", icon: LayoutDashboard, active: true }] },
+    {
+      title: "MY ACADEMICS",
+      items: [
+        { label: "My Profile", icon: Users },
+        { label: "My Attendance", icon: ClipboardCheck },
+        { label: "My Timetable", icon: CalendarDays },
+        { label: "Examinations", icon: FileText },
+        { label: "My Results", icon: Receipt },
+      ],
+    },
+    {
+      title: "SCHOOL UPDATES",
+      items: [{ label: "Notices & Events", icon: MessageSquare }],
+    },
+  ],
+
+  accountant: [
+    { title: "OVERVIEW", items: [{ label: "Dashboard", icon: LayoutDashboard, active: true }] },
+    {
+      title: "STUDENT RECORDS",
+      items: [{ label: "Students", icon: Users }],
+    },
+    {
+      title: "ACCOUNTS & FINANCE",
+      items: [
+        { label: "Fees & Payments", icon: Wallet },
+        { label: "Accounting", icon: CreditCard },
+        { label: "Expenses", icon: Receipt },
+        { label: "Financial Reports", icon: Activity },
+      ],
+    },
+  ],
+};
+
+/* -------------------------------------------------------
+   ROLE LABELS AND HELPERS
+------------------------------------------------------- */
+
+const roleLabels = {
+  superAdmin: "Super Administrator",
+  principal: "Principal",
+  teacher: "Teacher",
+  student: "Student",
+  accountant: "Accounts Department",
+};
+
+function getUserInitials(name = "EduManage User") {
+  return (
+    name
+      .trim()
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0].toUpperCase())
+      .join("") || "EU"
+  );
+}
+
+function getGreeting() {
+  const hour = Number(
+    new Intl.DateTimeFormat("en-GB", {
+      hour: "2-digit",
+      hourCycle: "h23",
+      timeZone: "Asia/Dhaka",
+    }).format(new Date())
+  );
+
+  if (hour < 12) return "Good morning";
+  if (hour < 17) return "Good afternoon";
+  return "Good evening";
+}
+
+/* -------------------------------------------------------
    DEMO DATA
    These records will later come from PostgreSQL.
 ------------------------------------------------------- */
-
-const navigation = [
-  {
-    title: "OVERVIEW",
-    items: [
-      { label: "Dashboard", icon: LayoutDashboard, active: true },
-    ],
-  },
-  {
-    title: "PEOPLE MANAGEMENT",
-    items: [
-      { label: "Students", icon: Users },
-      { label: "Admissions", icon: UserPlus },
-      { label: "Teachers & Staff", icon: GraduationCap },
-      { label: "Parents & Guardians", icon: Users },
-    ],
-  },
-  {
-    title: "ACADEMICS",
-    items: [
-      { label: "Classes & Sections", icon: School },
-      { label: "Subjects", icon: BookOpen },
-      { label: "Attendance", icon: ClipboardCheck },
-      { label: "Examinations", icon: FileText },
-      { label: "Results & Grades", icon: Receipt },
-      { label: "Class Timetable", icon: CalendarDays },
-    ],
-  },
-  {
-    title: "FINANCE",
-    items: [
-      { label: "Fees & Payments", icon: Wallet },
-      { label: "Accounting", icon: CreditCard },
-      { label: "Financial Reports", icon: Activity },
-    ],
-  },
-  {
-    title: "SCHOOL SERVICES",
-    items: [
-      { label: "Library", icon: Library },
-      { label: "Transport", icon: Bus },
-      { label: "Communication", icon: MessageSquare },
-    ],
-  },
-];
 
 const statistics = [
   {
@@ -276,10 +411,16 @@ const initialNotifications = [
 ];
 
 /* -------------------------------------------------------
-   REUSABLE UI COMPONENTS
+   SIDEBAR
 ------------------------------------------------------- */
 
-function Sidebar({ mobileOpen, closeSidebar }) {
+function Sidebar({ mobileOpen, closeSidebar, user, navigation }) {
+  const userName =
+    user?.name?.trim() || user?.email || "EduManage User";
+
+  const userRole = roleLabels[user?.role] || "School User";
+  const userInitials = getUserInitials(userName);
+
   return (
     <>
       {mobileOpen && (
@@ -333,9 +474,31 @@ function Sidebar({ mobileOpen, closeSidebar }) {
 
               <div className="space-y-1">
                 {group.items.map((item) => {
+
                   const Icon = item.icon;
 
                   if (item.active) {
+
+                    if (
+  item.label === "Attendance" &&
+  ["superAdmin", "principal", "teacher"].includes(user?.role)
+) {
+  return (
+    <a
+      key={item.label}
+      href="/admin/attendance"
+      onClick={closeSidebar}
+      className="group flex items-center gap-3 rounded-xl px-3.5 py-2.5 text-[13px] text-slate-300 transition hover:bg-white/[0.07] hover:text-white"
+    >
+      <Icon size={18} className="shrink-0 text-slate-400" />
+      <span>{item.label}</span>
+      <ChevronRight
+        size={15}
+        className="ml-auto text-slate-500 transition group-hover:text-blue-300"
+      />
+    </a>
+  );
+}
                     return (
                       <a
                         key={item.label}
@@ -383,25 +546,28 @@ function Sidebar({ mobileOpen, closeSidebar }) {
                 School Workspace
               </span>
             </div>
+
             <p className="mt-2 text-xs font-semibold text-white">
-              Northfield Academy
+              EduManage School
             </p>
+
             <p className="mt-1 text-[10px] text-slate-400">
-              Academic Session 2026
+              Academic workspace
             </p>
           </div>
 
           <div className="flex items-center gap-3 rounded-xl p-2">
             <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-400/20 bg-blue-500/20 text-xs font-bold text-blue-200">
-              AD
+              {userInitials}
             </div>
 
             <div className="min-w-0 flex-1">
               <p className="truncate text-xs font-semibold text-white">
-                School Administrator
+                {userName}
               </p>
+
               <p className="mt-1 text-[10px] text-slate-400">
-                System Admin
+                {userRole}
               </p>
             </div>
 
@@ -412,6 +578,10 @@ function Sidebar({ mobileOpen, closeSidebar }) {
     </>
   );
 }
+
+/* -------------------------------------------------------
+   STATISTICS CARD
+------------------------------------------------------- */
 
 function StatCard({ item }) {
   const Icon = item.icon;
@@ -483,6 +653,10 @@ function StatCard({ item }) {
   );
 }
 
+/* -------------------------------------------------------
+   CARD HEADING
+------------------------------------------------------- */
+
 function CardHeading({ title, subtitle, action }) {
   return (
     <div className="flex flex-wrap items-start justify-between gap-3">
@@ -492,7 +666,9 @@ function CardHeading({ title, subtitle, action }) {
         </h3>
 
         {subtitle && (
-          <p className="mt-1 text-[11px] text-slate-400">{subtitle}</p>
+          <p className="mt-1 text-[11px] text-slate-400">
+            {subtitle}
+          </p>
         )}
       </div>
 
@@ -500,6 +676,10 @@ function CardHeading({ title, subtitle, action }) {
     </div>
   );
 }
+
+/* -------------------------------------------------------
+   ATTENDANCE CARD
+------------------------------------------------------- */
 
 function AttendanceCard({ selectedRange, setSelectedRange }) {
   const chartData = attendanceData[selectedRange];
@@ -527,10 +707,12 @@ function AttendanceCard({ selectedRange, setSelectedRange }) {
           <p className="text-[11px] font-medium text-slate-400">
             Average attendance
           </p>
+
           <div className="mt-1 flex items-baseline gap-2">
             <span className="text-[30px] font-bold tracking-tight text-slate-900">
               94.7%
             </span>
+
             <span className="text-[10px] font-bold text-emerald-600">
               +2.4%
             </span>
@@ -540,15 +722,23 @@ function AttendanceCard({ selectedRange, setSelectedRange }) {
         <div className="flex gap-6">
           <div>
             <p className="text-[10px] text-slate-400">Present</p>
-            <p className="mt-1 text-sm font-bold text-slate-800">1,182</p>
+            <p className="mt-1 text-sm font-bold text-slate-800">
+              1,182
+            </p>
           </div>
+
           <div>
             <p className="text-[10px] text-slate-400">Absent</p>
-            <p className="mt-1 text-sm font-bold text-slate-800">42</p>
+            <p className="mt-1 text-sm font-bold text-slate-800">
+              42
+            </p>
           </div>
+
           <div>
             <p className="text-[10px] text-slate-400">Late</p>
-            <p className="mt-1 text-sm font-bold text-slate-800">24</p>
+            <p className="mt-1 text-sm font-bold text-slate-800">
+              24
+            </p>
           </div>
         </div>
       </div>
@@ -610,11 +800,30 @@ function AttendanceCard({ selectedRange, setSelectedRange }) {
   );
 }
 
+/* -------------------------------------------------------
+   FEE COLLECTION CARD
+------------------------------------------------------- */
+
 function FeeCollectionCard() {
   const feeBreakdown = [
-    { label: "Tuition fees", value: "৳5,98,000", percent: 71, color: "bg-blue-500" },
-    { label: "Admission fees", value: "৳1,36,500", percent: 16, color: "bg-violet-500" },
-    { label: "Examination fees", value: "৳1,08,000", percent: 13, color: "bg-amber-500" },
+    {
+      label: "Tuition fees",
+      value: "৳5,98,000",
+      percent: 71,
+      color: "bg-blue-500",
+    },
+    {
+      label: "Admission fees",
+      value: "৳1,36,500",
+      percent: 16,
+      color: "bg-violet-500",
+    },
+    {
+      label: "Examination fees",
+      value: "৳1,08,000",
+      percent: 13,
+      color: "bg-amber-500",
+    },
   ];
 
   return (
@@ -638,6 +847,7 @@ function FeeCollectionCard() {
           <h3 className="text-[30px] font-bold tracking-tight text-slate-900">
             ৳8,42,500
           </h3>
+
           <span className="text-[10px] font-bold text-emerald-600">
             +12.6%
           </span>
@@ -647,6 +857,7 @@ function FeeCollectionCard() {
           <span className="font-semibold text-slate-500">
             Monthly target progress
           </span>
+
           <span className="font-bold text-blue-700">82.4%</span>
         </div>
 
@@ -675,6 +886,7 @@ function FeeCollectionCard() {
                 <span className="text-[10px] text-slate-500">
                   {item.label}
                 </span>
+
                 <span className="text-[10px] font-semibold text-slate-700">
                   {item.value}
                 </span>
@@ -694,6 +906,10 @@ function FeeCollectionCard() {
   );
 }
 
+/* -------------------------------------------------------
+   STATUS BADGE
+------------------------------------------------------- */
+
 function StatusBadge({ status }) {
   const classes = {
     Active: "bg-emerald-50 text-emerald-700",
@@ -710,6 +926,10 @@ function StatusBadge({ status }) {
     </span>
   );
 }
+
+/* -------------------------------------------------------
+   RECENT ADMISSIONS
+------------------------------------------------------- */
 
 function RecentAdmissions({ searchQuery }) {
   const filteredStudents = students.filter((student) =>
@@ -860,6 +1080,10 @@ function RecentAdmissions({ searchQuery }) {
   );
 }
 
+/* -------------------------------------------------------
+   SCHEDULE CARD
+------------------------------------------------------- */
+
 function ScheduleCard() {
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.025)] sm:p-6">
@@ -922,6 +1146,10 @@ function ScheduleCard() {
   );
 }
 
+/* -------------------------------------------------------
+   RECENT PAYMENTS
+------------------------------------------------------- */
+
 function RecentPayments() {
   return (
     <section className="rounded-2xl border border-slate-200/80 bg-white p-5 shadow-[0_2px_12px_rgba(15,23,42,0.025)] sm:p-6">
@@ -972,6 +1200,10 @@ function RecentPayments() {
   );
 }
 
+/* -------------------------------------------------------
+   SCHOOL OVERVIEW
+------------------------------------------------------- */
+
 function SchoolOverviewCard() {
   const items = [
     { label: "Academic session", value: "2026" },
@@ -1021,12 +1253,29 @@ function SchoolOverviewCard() {
     </section>
   );
 }
-
 /* -------------------------------------------------------
    MAIN DASHBOARD
 ------------------------------------------------------- */
 
 export default function DashboardPage() {
+  const { data: session, isPending } = useSession();
+
+  const currentUser = session?.user;
+  const currentRole = currentUser?.role;
+
+  const navigation =
+    navigationByRole[currentRole] || navigationByRole.student;
+
+  const userName =
+    currentUser?.name?.trim() ||
+    currentUser?.email ||
+    "EduManage User";
+
+  const firstName = userName.split(/\s+/)[0];
+
+  const userRole = roleLabels[currentRole] || "School User";
+  const userInitials = getUserInitials(userName);
+
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState("");
   const [selectedRange, setSelectedRange] = useState("7 days");
@@ -1058,11 +1307,24 @@ export default function DashboardPage() {
 
   const closeSidebar = () => setMobileOpen(false);
 
+  if (isPending) {
+    return (
+      <div className="flex min-h-screen items-center justify-center bg-[#f5f7fb]">
+        <div className="flex items-center gap-3 rounded-2xl border border-slate-200 bg-white px-5 py-4 text-sm font-medium text-slate-600 shadow-sm">
+          <span className="h-5 w-5 animate-spin rounded-full border-2 border-blue-600 border-t-transparent" />
+          Loading your dashboard...
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-[#f5f7fb] font-sans text-slate-800 antialiased">
       <Sidebar
         mobileOpen={mobileOpen}
         closeSidebar={closeSidebar}
+        user={currentUser}
+        navigation={navigation}
       />
 
       {/* Main Workspace */}
@@ -1084,7 +1346,7 @@ export default function DashboardPage() {
                 SCHOOL WORKSPACE
               </p>
               <p className="mt-0.5 text-xs font-semibold text-slate-700">
-                Northfield Academy
+                EduManage School
               </p>
             </div>
 
@@ -1120,7 +1382,9 @@ export default function DashboardPage() {
                 type="button"
                 aria-label="Notifications"
                 aria-expanded={notificationsOpen}
-                onClick={() => setNotificationsOpen((current) => !current)}
+                onClick={() =>
+                  setNotificationsOpen((current) => !current)
+                }
                 className="relative flex h-9 w-9 items-center justify-center rounded-xl border border-slate-200 text-slate-600 transition hover:bg-slate-50"
               >
                 <Bell size={17} />
@@ -1191,18 +1455,18 @@ export default function DashboardPage() {
 
             <div className="hidden h-8 w-px bg-slate-200 sm:block" />
 
-            {/* Admin profile */}
-            <div className="flex items-center gap-2.5">
-              <div className="flex h-9 w-9 items-center justify-center rounded-full border border-blue-100 bg-gradient-to-br from-blue-100 to-indigo-100 text-[11px] font-bold text-blue-700">
-                AD
+            {/* Logged-in user profile */}
+            <div className="flex min-w-0 items-center gap-2.5">
+              <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full border border-blue-100 bg-gradient-to-br from-blue-100 to-indigo-100 text-[11px] font-bold text-blue-700">
+                {userInitials}
               </div>
 
-              <div className="hidden sm:block">
-                <p className="text-[11px] font-semibold text-slate-800">
-                  Administrator
+              <div className="hidden min-w-0 sm:block">
+                <p className="max-w-[150px] truncate text-[11px] font-semibold text-slate-800">
+                  {userName}
                 </p>
-                <p className="mt-0.5 text-[9px] text-slate-400">
-                  School Admin
+                <p className="mt-0.5 max-w-[150px] truncate text-[9px] text-slate-400">
+                  {userRole}
                 </p>
               </div>
             </div>
@@ -1211,7 +1475,6 @@ export default function DashboardPage() {
 
         {/* Dashboard Content */}
         <main className="mx-auto w-full max-w-[1600px] p-4 sm:p-6 lg:p-8">
-
           {/* Mobile Search */}
           <div className="relative mb-5 sm:hidden">
             <Search
@@ -1240,11 +1503,13 @@ export default function DashboardPage() {
               </div>
 
               <h1 className="text-[25px] font-bold tracking-tight text-slate-900 sm:text-[30px]">
-                Good morning, Administrator
+                {getGreeting()}, {firstName}
               </h1>
 
               <p className="mt-2 max-w-xl text-[12px] leading-relaxed text-slate-500">
-                Here's what's happening at Northfield Academy. Monitor your school's daily performance from one place.
+                Welcome to your EduManage workspace. Your dashboard provides
+                the information and tools available to your{" "}
+                {userRole.toLowerCase()} account.
               </p>
             </div>
 
@@ -1252,7 +1517,9 @@ export default function DashboardPage() {
               <CalendarDays size={15} className="text-blue-600" />
 
               <div>
-                <p className="text-[9px] text-slate-400">Academic session</p>
+                <p className="text-[9px] text-slate-400">
+                  Academic session
+                </p>
                 <p className="text-[11px] font-bold text-slate-700">
                   2026
                 </p>
@@ -1267,7 +1534,8 @@ export default function DashboardPage() {
             <Sparkles size={15} className="shrink-0 text-blue-600" />
             <p className="text-[10px] leading-relaxed text-blue-800">
               <span className="font-bold">Dashboard preview:</span>{" "}
-              Displayed figures are sample data. Database integration will be added in the next development phases.
+              Displayed figures are sample data. Database integration will be
+              added in the next development phases.
             </p>
           </div>
 
@@ -1323,8 +1591,9 @@ export default function DashboardPage() {
             <div className="flex items-center gap-4 text-[10px] text-slate-400">
               <span className="flex items-center gap-1.5">
                 <ShieldCheck size={13} className="text-emerald-600" />
-                Administration workspace
+                Secure school workspace
               </span>
+
               <span className="flex items-center gap-1.5">
                 <CircleHelp size={13} />
                 Help & Support

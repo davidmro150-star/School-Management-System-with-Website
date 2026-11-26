@@ -2,7 +2,6 @@
 import { createAccessControl } from "better-auth/plugins/access";
 import { defaultStatements } from "better-auth/plugins/admin/access";
 
-// EduManage permission definitions.
 const statement = {
   ...defaultStatements,
 
@@ -28,6 +27,66 @@ const statement = {
 
 export const ac = createAccessControl(statement);
 
+// Central permission definitions for all five roles.
+export const rolePermissionMap = {
+  // 1. Super Admin: Full system access.
+  superAdmin: Object.fromEntries(
+    Object.entries(statement).map(([resource, actions]) => [
+      resource,
+      [...actions],
+    ])
+  ),
+
+  // 2. Principal: Academic leadership and school oversight.
+  principal: {
+    dashboard: ["read"],
+    students: ["read", "update", "export"],
+    guardians: ["read"],
+    admissions: ["read", "approve", "reject"],
+    staff: ["read"],
+    academics: ["create", "read", "update", "assign"],
+    attendance: ["read", "correct", "export"],
+    fees: ["read"],
+    examinations: ["create", "read", "update", "publish"],
+    results: ["create", "read", "update", "publish", "export"],
+    website: ["create", "read", "update", "publish"],
+    media: ["upload", "read"],
+    reports: ["read", "export"],
+  },
+
+  // 3. Teacher: Teaching and assigned student management.
+  teacher: {
+    dashboard: ["read"],
+    students: ["read"],
+    academics: ["read"],
+    attendance: ["mark", "read"],
+    examinations: ["read"],
+    results: ["create", "read", "update"],
+    website: ["read"],
+    library: ["read"],
+  },
+
+  // 4. Student: Own academic information.
+  student: {
+    dashboard: ["read"],
+    academics: ["read"],
+    attendance: ["read"],
+    examinations: ["read"],
+    results: ["read"],
+    website: ["read"],
+    library: ["read"],
+  },
+
+  // 5. Accountant: Financial management.
+  accountant: {
+    dashboard: ["read"],
+    students: ["read"],
+    fees: [...statement.fees],
+    reports: ["read", "export"],
+  },
+};
+
+// Convert permission definitions into Better Auth roles.
 function createRole(grants = {}) {
   const permissions = Object.fromEntries(
     Object.keys(statement).map((resource) => [
@@ -39,117 +98,20 @@ function createRole(grants = {}) {
   return ac.newRole(permissions);
 }
 
-// Super Admin: complete system access.
-const superAdmin = createRole(
-  Object.fromEntries(
-    Object.entries(statement).map(([resource, actions]) => [
-      resource,
-      [...actions],
-    ])
-  )
+export const roleDefinitions = Object.fromEntries(
+  Object.entries(rolePermissionMap).map(([role, permissions]) => [
+    role,
+    createRole(permissions),
+  ])
 );
 
-// School Administrator.
-const schoolAdmin = createRole({
-  dashboard: ["read"],
-  students: statement.students,
-  guardians: statement.guardians,
-  admissions: statement.admissions,
-  staff: statement.staff,
-  academics: statement.academics,
-  attendance: statement.attendance,
-  fees: statement.fees,
-  examinations: statement.examinations,
-  results: statement.results,
-  website: statement.website,
-  media: statement.media,
-  library: statement.library,
-  transport: statement.transport,
-  reports: statement.reports,
-  settings: statement.settings,
-  auditLogs: ["read"],
-});
+// Server-side permission checker.
+export function hasRolePermission(role, resource, action) {
+  if (!role || !resource || !action) {
+    return false;
+  }
 
-// Principal.
-const principal = createRole({
-  dashboard: ["read"],
-  students: ["read"],
-  guardians: ["read"],
-  staff: ["read"],
-  academics: ["read", "update", "assign"],
-  attendance: ["read", "export"],
-  examinations: ["create", "read", "update", "publish"],
-  results: statement.results,
-  website: ["create", "read", "update", "publish"],
-  reports: statement.reports,
-});
-
-// Teacher.
-const teacher = createRole({
-  dashboard: ["read"],
-  students: ["read"],
-  academics: ["read"],
-  attendance: ["mark", "read"],
-  examinations: ["read"],
-  results: ["create", "read", "update"],
-  website: ["read"],
-  library: ["read"],
-});
-
-// Accountant.
-const accountant = createRole({
-  dashboard: ["read"],
-  students: ["read"],
-  fees: statement.fees,
-  reports: statement.reports,
-});
-
-// Receptionist.
-const receptionist = createRole({
-  dashboard: ["read"],
-  students: ["create", "read", "update"],
-  guardians: ["create", "read", "update"],
-  admissions: statement.admissions,
-  fees: ["create", "read"],
-});
-
-// Librarian.
-const librarian = createRole({
-  dashboard: ["read"],
-  students: ["read"],
-  library: statement.library,
-  reports: ["read"],
-});
-
-// Student.
-const student = createRole({
-  dashboard: ["read"],
-  academics: ["read"],
-  attendance: ["read"],
-  examinations: ["read"],
-  results: ["read"],
-  website: ["read"],
-  library: ["read"],
-});
-
-// Parent.
-const parent = createRole({
-  dashboard: ["read"],
-  students: ["read"],
-  attendance: ["read"],
-  fees: ["read"],
-  results: ["read"],
-  website: ["read"],
-});
-
-export const roleDefinitions = {
-  superAdmin,
-  schoolAdmin,
-  principal,
-  teacher,
-  accountant,
-  receptionist,
-  librarian,
-  student,
-  parent,
-};
+  return (
+    rolePermissionMap[role]?.[resource]?.includes(action) ?? false
+  );
+}

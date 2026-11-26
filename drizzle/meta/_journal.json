@@ -22,6 +22,20 @@
       "when": 1795634821367,
       "tag": "0002_illegal_stellaris",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1795697801447,
+      "tag": "0003_steady_william_stryker",
+      "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1795698515918,
+      "tag": "0004_striped_triton",
+      "breakpoints": true
     }
   ]
 }
