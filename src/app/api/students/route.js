@@ -7,6 +7,7 @@ import {
   ilike,
   isNull,
   or,
+  sql,
 } from "drizzle-orm";
 
 import { db } from "@/db";
@@ -31,7 +32,10 @@ export const runtime = "nodejs";
 // =====================================================
 
 function isValidDate(value) {
-  if (typeof value !== "string" || !/^\d{4}-\d{2}-\d{2}$/.test(value)) {
+  if (
+    typeof value !== "string" ||
+    !/^\d{4}-\d{2}-\d{2}$/.test(value)
+  ) {
     return false;
   }
 
@@ -90,8 +94,13 @@ export async function GET(request) {
     const user = permission.user;
     const { searchParams } = new URL(request.url);
 
-    const search = (searchParams.get("search") || "").trim();
-    const status = searchParams.get("status") || "";
+    const search = (
+      searchParams.get("search") || ""
+    ).trim();
+
+    const status = (
+      searchParams.get("status") || ""
+    ).trim();
 
     const academicYear = (
       searchParams.get("academicYear") || ""
@@ -99,23 +108,33 @@ export async function GET(request) {
 
     const page = Math.max(
       1,
-      Number.parseInt(searchParams.get("page") || "1", 10) || 1
+      Number.parseInt(
+        searchParams.get("page") || "1",
+        10
+      ) || 1
     );
 
     const limit = Math.min(
       100,
       Math.max(
         1,
-        Number.parseInt(searchParams.get("limit") || "20", 10) || 20
+        Number.parseInt(
+          searchParams.get("limit") || "20",
+          10
+        ) || 20
       )
     );
 
     const offset = (page - 1) * limit;
 
-    if (
-      status &&
-      !["active", "inactive", "graduated"].includes(status)
-    ) {
+    const validStatuses = [
+      "active",
+      "inactive",
+      "graduated",
+      "transferred",
+    ];
+
+    if (status && !validStatuses.includes(status)) {
       return Response.json(
         {
           success: false,
@@ -125,7 +144,19 @@ export async function GET(request) {
       );
     }
 
-    // Students will use a separate own-profile endpoint.
+    if (
+      academicYear &&
+      !/^\d{4}(-\d{4})?$/.test(academicYear)
+    ) {
+      return Response.json(
+        {
+          success: false,
+          message: "Invalid academic year.",
+        },
+        { status: 400 }
+      );
+    }
+
     if (user.role === "student") {
       return Response.json(
         {
@@ -136,10 +167,15 @@ export async function GET(request) {
       );
     }
 
-    const conditions = [isNull(students.deletedAt)];
+    // Base student filters.
+    const conditions = [
+      isNull(students.deletedAt),
+    ];
 
     if (status) {
-      conditions.push(eq(students.status, status));
+      conditions.push(
+        eq(students.status, status)
+      );
     }
 
     if (search) {
@@ -156,9 +192,68 @@ export async function GET(request) {
       );
     }
 
-    // Teachers can only see students in their assigned sections.
+    // -------------------------------------------------
+    // ENROLLMENT JOIN CONDITION
+    // -------------------------------------------------
+
+    const enrollmentConditions = [
+      eq(
+        studentEnrollments.studentId,
+        students.id
+      ),
+      eq(
+        studentEnrollments.isActive,
+        true
+      ),
+    ];
+
+    if (academicYear) {
+      enrollmentConditions.push(
+        eq(
+          studentEnrollments.academicYear,
+          academicYear
+        )
+      );
+    } else {
+      // When "All Academic Years" is selected,
+      // show the latest active enrollment for each student.
+      // This prevents duplicate student rows.
+      enrollmentConditions.push(
+        sql`${studentEnrollments.academicYear} = (
+          SELECT enrollment_latest.academic_year
+          FROM student_enrollments AS enrollment_latest
+          WHERE enrollment_latest.student_id = ${students.id}
+            AND enrollment_latest.is_active = true
+          ORDER BY enrollment_latest.academic_year DESC
+          LIMIT 1
+        )`
+      );
+    }
+
+    const enrollmentJoinCondition = and(
+      ...enrollmentConditions
+    );
+
+    // Fields returned to the Student Directory.
+    const directoryFields = {
+      ...studentFields(),
+
+      rollNumber: studentEnrollments.rollNumber,
+      academicYear: studentEnrollments.academicYear,
+
+      classId: schoolClasses.id,
+      className: schoolClasses.name,
+
+      sectionId: classSections.id,
+      sectionName: classSections.name,
+    };
+
+    // =================================================
+    // TEACHER DIRECTORY
+    // =================================================
+
     if (user.role === "teacher") {
-      if (!/^\d{4}(-\d{4})?$/.test(academicYear)) {
+      if (!academicYear) {
         return Response.json(
           {
             success: false,
@@ -169,21 +264,50 @@ export async function GET(request) {
       }
 
       conditions.push(
-        eq(studentEnrollments.academicYear, academicYear),
-        eq(studentEnrollments.isActive, true),
-        eq(teacherAssignments.teacherUserId, user.id),
-        eq(teacherAssignments.academicYear, academicYear),
-        eq(teacherAssignments.isActive, true)
+        eq(
+          studentEnrollments.academicYear,
+          academicYear
+        ),
+        eq(
+          studentEnrollments.isActive,
+          true
+        ),
+        eq(
+          teacherAssignments.teacherUserId,
+          user.id
+        ),
+        eq(
+          teacherAssignments.academicYear,
+          academicYear
+        ),
+        eq(
+          teacherAssignments.isActive,
+          true
+        )
       );
 
       const whereCondition = and(...conditions);
 
       const data = await db
-        .selectDistinct(studentFields())
+        .selectDistinct(directoryFields)
         .from(students)
         .innerJoin(
           studentEnrollments,
-          eq(studentEnrollments.studentId, students.id)
+          enrollmentJoinCondition
+        )
+        .innerJoin(
+          classSections,
+          eq(
+            classSections.id,
+            studentEnrollments.classSectionId
+          )
+        )
+        .innerJoin(
+          schoolClasses,
+          eq(
+            schoolClasses.id,
+            classSections.classId
+          )
         )
         .innerJoin(
           teacherAssignments,
@@ -195,6 +319,14 @@ export async function GET(request) {
             eq(
               teacherAssignments.academicYear,
               studentEnrollments.academicYear
+            ),
+            eq(
+              teacherAssignments.teacherUserId,
+              user.id
+            ),
+            eq(
+              teacherAssignments.isActive,
+              true
             )
           )
         )
@@ -210,7 +342,7 @@ export async function GET(request) {
         .from(students)
         .innerJoin(
           studentEnrollments,
-          eq(studentEnrollments.studentId, students.id)
+          enrollmentJoinCondition
         )
         .innerJoin(
           teacherAssignments,
@@ -222,6 +354,14 @@ export async function GET(request) {
             eq(
               teacherAssignments.academicYear,
               studentEnrollments.academicYear
+            ),
+            eq(
+              teacherAssignments.teacherUserId,
+              user.id
+            ),
+            eq(
+              teacherAssignments.isActive,
+              true
             )
           )
         )
@@ -241,12 +381,33 @@ export async function GET(request) {
       });
     }
 
-    // Principal, Super Admin and Accountant.
+    // =================================================
+    // SUPER ADMIN / PRINCIPAL / ACCOUNTANT DIRECTORY
+    // =================================================
+
     const whereCondition = and(...conditions);
 
     const data = await db
-      .select(studentFields())
+      .select(directoryFields)
       .from(students)
+      .leftJoin(
+        studentEnrollments,
+        enrollmentJoinCondition
+      )
+      .leftJoin(
+        classSections,
+        eq(
+          classSections.id,
+          studentEnrollments.classSectionId
+        )
+      )
+      .leftJoin(
+        schoolClasses,
+        eq(
+          schoolClasses.id,
+          classSections.classId
+        )
+      )
       .where(whereCondition)
       .orderBy(desc(students.createdAt))
       .limit(limit)
@@ -257,6 +418,10 @@ export async function GET(request) {
         total: countDistinct(students.id),
       })
       .from(students)
+      .leftJoin(
+        studentEnrollments,
+        enrollmentJoinCondition
+      )
       .where(whereCondition);
 
     const total = Number(totalResult.total);
@@ -290,9 +455,7 @@ export async function GET(request) {
 
 export async function POST(request) {
   try {
-    // -------------------------------------------------
     // 1. PERMISSION CHECK
-    // -------------------------------------------------
 
     const permission = await requirePermission(
       request,
@@ -306,9 +469,7 @@ export async function POST(request) {
 
     const user = permission.user;
 
-    // -------------------------------------------------
     // 2. READ REQUEST BODY
-    // -------------------------------------------------
 
     let body;
 
@@ -324,7 +485,11 @@ export async function POST(request) {
       );
     }
 
-    if (!body || typeof body !== "object" || Array.isArray(body)) {
+    if (
+      !body ||
+      typeof body !== "object" ||
+      Array.isArray(body)
+    ) {
       return Response.json(
         {
           success: false,
@@ -334,9 +499,7 @@ export async function POST(request) {
       );
     }
 
-    // -------------------------------------------------
     // 3. STUDENT INFORMATION
-    // -------------------------------------------------
 
     const admissionNumber = getString(
       body.admissionNumber
@@ -353,33 +516,42 @@ export async function POST(request) {
     const religion = getString(body.religion);
     const photoUrl = getString(body.photoUrl);
 
-    const previousSchool = getString(body.previousSchool);
-    const previousClass = getString(body.previousClass);
+    const previousSchool = getString(
+      body.previousSchool
+    );
 
-    const admissionDate = getString(body.admissionDate);
+    const previousClass = getString(
+      body.previousClass
+    );
 
-    // -------------------------------------------------
+    const admissionDate = getString(
+      body.admissionDate
+    );
+
     // 4. ACADEMIC ENROLLMENT INFORMATION
-    // -------------------------------------------------
 
     const classId = getString(body.classId);
-    const classSectionId = getString(body.classSectionId);
+    const classSectionId = getString(
+      body.classSectionId
+    );
 
     const academicYear = getString(body.academicYear);
     const rollNumber = getString(body.rollNumber);
 
-    // -------------------------------------------------
     // 5. GUARDIAN INFORMATION
-    // -------------------------------------------------
 
     const guardianData = {
       fatherName: optionalString(body.fatherName),
       fatherPhone: optionalString(body.fatherPhone),
-      fatherOccupation: optionalString(body.fatherOccupation),
+      fatherOccupation: optionalString(
+        body.fatherOccupation
+      ),
 
       motherName: optionalString(body.motherName),
       motherPhone: optionalString(body.motherPhone),
-      motherOccupation: optionalString(body.motherOccupation),
+      motherOccupation: optionalString(
+        body.motherOccupation
+      ),
 
       guardianName: optionalString(body.guardianName),
       guardianRelationship: optionalString(
@@ -388,9 +560,7 @@ export async function POST(request) {
       guardianPhone: optionalString(body.guardianPhone),
     };
 
-    // -------------------------------------------------
     // 6. ADDRESS INFORMATION
-    // -------------------------------------------------
 
     const addressData = {
       village: optionalString(body.village),
@@ -399,13 +569,15 @@ export async function POST(request) {
       unionName: optionalString(body.unionName),
       upazila: optionalString(body.upazila),
       district: optionalString(body.district),
-      presentAddress: optionalString(body.presentAddress),
-      permanentAddress: optionalString(body.permanentAddress),
+      presentAddress: optionalString(
+        body.presentAddress
+      ),
+      permanentAddress: optionalString(
+        body.permanentAddress
+      ),
     };
 
-    // -------------------------------------------------
     // 7. EMERGENCY CONTACTS
-    // -------------------------------------------------
 
     if (
       body.emergencyContacts !== undefined &&
@@ -420,13 +592,15 @@ export async function POST(request) {
       );
     }
 
-    const rawEmergencyContacts = body.emergencyContacts || [];
+    const rawEmergencyContacts =
+      body.emergencyContacts || [];
 
     if (rawEmergencyContacts.length > 10) {
       return Response.json(
         {
           success: false,
-          message: "You can add a maximum of 10 emergency contacts.",
+          message:
+            "You can add a maximum of 10 emergency contacts.",
         },
         { status: 400 }
       );
@@ -435,26 +609,41 @@ export async function POST(request) {
     const emergencyContacts = [];
 
     for (const contact of rawEmergencyContacts) {
-      if (!contact || typeof contact !== "object" || Array.isArray(contact)) {
+      if (
+        !contact ||
+        typeof contact !== "object" ||
+        Array.isArray(contact)
+      ) {
         return Response.json(
           {
             success: false,
-            message: "Invalid emergency contact information.",
+            message:
+              "Invalid emergency contact information.",
           },
           { status: 400 }
         );
       }
 
-      const contactName = getString(contact.contactName);
-      const relationship = getString(contact.relationship);
-      const contactPhone = getString(contact.phone);
+      const contactName = getString(
+        contact.contactName
+      );
 
-      // Completely empty contact rows are ignored.
-      if (!contactName && !relationship && !contactPhone) {
+      const relationship = getString(
+        contact.relationship
+      );
+
+      const contactPhone = getString(
+        contact.phone
+      );
+
+      if (
+        !contactName &&
+        !relationship &&
+        !contactPhone
+      ) {
         continue;
       }
 
-      // Name and phone must be supplied together.
       if (!contactName || !contactPhone) {
         return Response.json(
           {
@@ -474,7 +663,8 @@ export async function POST(request) {
         return Response.json(
           {
             success: false,
-            message: "An emergency contact field is too long.",
+            message:
+              "An emergency contact field is too long.",
           },
           { status: 400 }
         );
@@ -487,9 +677,7 @@ export async function POST(request) {
       });
     }
 
-    // -------------------------------------------------
     // 8. REQUIRED FIELD VALIDATION
-    // -------------------------------------------------
 
     if (
       !admissionNumber ||
@@ -510,9 +698,7 @@ export async function POST(request) {
       );
     }
 
-    // -------------------------------------------------
     // 9. FIELD LENGTH VALIDATION
-    // -------------------------------------------------
 
     const lengthChecks = [
       [admissionNumber, 50],
@@ -528,19 +714,22 @@ export async function POST(request) {
       [rollNumber, 30],
     ];
 
-    if (lengthChecks.some(([value, max]) => value.length > max)) {
+    if (
+      lengthChecks.some(
+        ([value, max]) => value.length > max
+      )
+    ) {
       return Response.json(
         {
           success: false,
-          message: "One or more fields exceed the allowed length.",
+          message:
+            "One or more fields exceed the allowed length.",
         },
         { status: 400 }
       );
     }
 
-    // -------------------------------------------------
     // 10. ADMISSION NUMBER VALIDATION
-    // -------------------------------------------------
 
     if (!/^[A-Z0-9/-]+$/.test(admissionNumber)) {
       return Response.json(
@@ -553,9 +742,7 @@ export async function POST(request) {
       );
     }
 
-    // -------------------------------------------------
     // 11. EMAIL VALIDATION
-    // -------------------------------------------------
 
     if (
       email &&
@@ -564,21 +751,21 @@ export async function POST(request) {
       return Response.json(
         {
           success: false,
-          message: "Please provide a valid email address.",
+          message:
+            "Please provide a valid email address.",
         },
         { status: 400 }
       );
     }
 
-    // -------------------------------------------------
     // 12. DATE VALIDATION
-    // -------------------------------------------------
 
     if (dateOfBirth && !isValidDate(dateOfBirth)) {
       return Response.json(
         {
           success: false,
-          message: "Please provide a valid date of birth.",
+          message:
+            "Please provide a valid date of birth.",
         },
         { status: 400 }
       );
@@ -588,7 +775,8 @@ export async function POST(request) {
       return Response.json(
         {
           success: false,
-          message: "Please provide a valid admission date.",
+          message:
+            "Please provide a valid admission date.",
         },
         { status: 400 }
       );
@@ -598,15 +786,14 @@ export async function POST(request) {
       return Response.json(
         {
           success: false,
-          message: "Date of birth cannot be after the admission date.",
+          message:
+            "Date of birth cannot be after the admission date.",
         },
         { status: 400 }
       );
     }
 
-    // -------------------------------------------------
     // 13. ACADEMIC YEAR VALIDATION
-    // -------------------------------------------------
 
     if (!/^\d{4}(-\d{4})?$/.test(academicYear)) {
       return Response.json(
@@ -635,23 +822,7 @@ export async function POST(request) {
       }
     }
 
-    // -------------------------------------------------
-    // 14. ROLL NUMBER VALIDATION
-    // -------------------------------------------------
-
-    if (rollNumber.length > 30) {
-      return Response.json(
-        {
-          success: false,
-          message: "Roll number cannot exceed 30 characters.",
-        },
-        { status: 400 }
-      );
-    }
-
-    // -------------------------------------------------
-    // 15. GUARDIAN FIELD LENGTH VALIDATION
-    // -------------------------------------------------
+    // 14. GUARDIAN FIELD LENGTH VALIDATION
 
     const guardianLengthChecks = [
       [guardianData.fatherName, 150],
@@ -673,15 +844,14 @@ export async function POST(request) {
       return Response.json(
         {
           success: false,
-          message: "One or more guardian fields are too long.",
+          message:
+            "One or more guardian fields are too long.",
         },
         { status: 400 }
       );
     }
 
-    // -------------------------------------------------
-    // 16. ADDRESS FIELD LENGTH VALIDATION
-    // -------------------------------------------------
+    // 15. ADDRESS FIELD LENGTH VALIDATION
 
     const addressLengthChecks = [
       [addressData.village, 150],
@@ -700,15 +870,14 @@ export async function POST(request) {
       return Response.json(
         {
           success: false,
-          message: "One or more address fields are too long.",
+          message:
+            "One or more address fields are too long.",
         },
         { status: 400 }
       );
     }
 
-    // -------------------------------------------------
-    // 17. CHECK CLASS AND SECTION
-    // -------------------------------------------------
+    // 16. CHECK CLASS
 
     const [selectedClass] = await db
       .select({
@@ -730,7 +899,8 @@ export async function POST(request) {
       return Response.json(
         {
           success: false,
-          message: "Selected class does not exist or is inactive.",
+          message:
+            "Selected class does not exist or is inactive.",
         },
         { status: 400 }
       );
@@ -744,11 +914,14 @@ export async function POST(request) {
       return Response.json(
         {
           success: false,
-          message: "Only Class 6 through Class 10 are supported.",
+          message:
+            "Only Class 6 through Class 10 are supported.",
         },
         { status: 400 }
       );
     }
+
+    // 17. CHECK SECTION
 
     const [selectedSection] = await db
       .select({
@@ -779,9 +952,7 @@ export async function POST(request) {
       );
     }
 
-    // -------------------------------------------------
     // 18. TEACHER ASSIGNMENT VALIDATION
-    // -------------------------------------------------
 
     if (user.role === "teacher") {
       const [assignment] = await db
@@ -791,10 +962,22 @@ export async function POST(request) {
         .from(teacherAssignments)
         .where(
           and(
-            eq(teacherAssignments.teacherUserId, user.id),
-            eq(teacherAssignments.classSectionId, classSectionId),
-            eq(teacherAssignments.academicYear, academicYear),
-            eq(teacherAssignments.isActive, true)
+            eq(
+              teacherAssignments.teacherUserId,
+              user.id
+            ),
+            eq(
+              teacherAssignments.classSectionId,
+              classSectionId
+            ),
+            eq(
+              teacherAssignments.academicYear,
+              academicYear
+            ),
+            eq(
+              teacherAssignments.isActive,
+              true
+            )
           )
         )
         .limit(1);
@@ -811,31 +994,33 @@ export async function POST(request) {
       }
     }
 
-    // -------------------------------------------------
     // 19. CHECK DUPLICATE ADMISSION NUMBER
-    // -------------------------------------------------
 
     const [existingStudent] = await db
       .select({
         id: students.id,
       })
       .from(students)
-      .where(eq(students.admissionNumber, admissionNumber))
+      .where(
+        eq(
+          students.admissionNumber,
+          admissionNumber
+        )
+      )
       .limit(1);
 
     if (existingStudent) {
       return Response.json(
         {
           success: false,
-          message: "This admission number is already registered.",
+          message:
+            "This admission number is already registered.",
         },
         { status: 409 }
       );
     }
 
-    // -------------------------------------------------
     // 20. CHECK DUPLICATE ROLL NUMBER
-    // -------------------------------------------------
 
     const [existingRoll] = await db
       .select({
@@ -844,10 +1029,22 @@ export async function POST(request) {
       .from(studentEnrollments)
       .where(
         and(
-          eq(studentEnrollments.classSectionId, classSectionId),
-          eq(studentEnrollments.academicYear, academicYear),
-          eq(studentEnrollments.rollNumber, rollNumber),
-          eq(studentEnrollments.isActive, true)
+          eq(
+            studentEnrollments.classSectionId,
+            classSectionId
+          ),
+          eq(
+            studentEnrollments.academicYear,
+            academicYear
+          ),
+          eq(
+            studentEnrollments.rollNumber,
+            rollNumber
+          ),
+          eq(
+            studentEnrollments.isActive,
+            true
+          )
         )
       )
       .limit(1);
@@ -863,12 +1060,11 @@ export async function POST(request) {
       );
     }
 
-    // -------------------------------------------------
-    // 21. TRANSACTION: SAVE ALL STUDENT INFORMATION
-    // -------------------------------------------------
+    // 21. SAVE ALL STUDENT INFORMATION IN A TRANSACTION
 
     const result = await db.transaction(async (tx) => {
       // A. Create student.
+
       const [newStudent] = await tx
         .insert(students)
         .values({
@@ -892,23 +1088,30 @@ export async function POST(request) {
         })
         .returning(studentFields());
 
-      // B. Create guardian information if provided.
+      // B. Create guardian information.
+
       if (hasAnyValue(guardianData)) {
-        await tx.insert(studentGuardians).values({
-          studentId: newStudent.id,
-          ...guardianData,
-        });
+        await tx
+          .insert(studentGuardians)
+          .values({
+            studentId: newStudent.id,
+            ...guardianData,
+          });
       }
 
-      // C. Create address information if provided.
+      // C. Create address information.
+
       if (hasAnyValue(addressData)) {
-        await tx.insert(studentAddresses).values({
-          studentId: newStudent.id,
-          ...addressData,
-        });
+        await tx
+          .insert(studentAddresses)
+          .values({
+            studentId: newStudent.id,
+            ...addressData,
+          });
       }
 
       // D. Create academic enrollment.
+
       const [newEnrollment] = await tx
         .insert(studentEnrollments)
         .values({
@@ -922,10 +1125,12 @@ export async function POST(request) {
           id: studentEnrollments.id,
           academicYear: studentEnrollments.academicYear,
           rollNumber: studentEnrollments.rollNumber,
-          classSectionId: studentEnrollments.classSectionId,
+          classSectionId:
+            studentEnrollments.classSectionId,
         });
 
-      // E. Create emergency contacts if provided.
+      // E. Create emergency contacts.
+
       let savedEmergencyContacts = [];
 
       if (emergencyContacts.length > 0) {
@@ -939,8 +1144,10 @@ export async function POST(request) {
           )
           .returning({
             id: studentEmergencyContacts.id,
-            contactName: studentEmergencyContacts.contactName,
-            relationship: studentEmergencyContacts.relationship,
+            contactName:
+              studentEmergencyContacts.contactName,
+            relationship:
+              studentEmergencyContacts.relationship,
             phone: studentEmergencyContacts.phone,
           });
       }
@@ -952,9 +1159,7 @@ export async function POST(request) {
       };
     });
 
-    // -------------------------------------------------
     // 22. SUCCESS RESPONSE
-    // -------------------------------------------------
 
     return Response.json(
       {
@@ -973,7 +1178,6 @@ export async function POST(request) {
   } catch (error) {
     console.error("Student registration error:", error);
 
-    // PostgreSQL unique constraint violation.
     if (error.code === "23505") {
       return Response.json(
         {
@@ -985,7 +1189,6 @@ export async function POST(request) {
       );
     }
 
-    // Foreign key violation.
     if (error.code === "23503") {
       return Response.json(
         {
@@ -1000,7 +1203,8 @@ export async function POST(request) {
     return Response.json(
       {
         success: false,
-        message: "Unable to register student. Please try again.",
+        message:
+          "Unable to register student. Please try again.",
       },
       { status: 500 }
     );

@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -26,6 +25,7 @@ import {
   Trash2,
   Camera,
   Eye,
+  Pencil,
 } from "lucide-react";
 
 import { useSession } from "@/lib/auth-client";
@@ -93,6 +93,7 @@ const initialForm = {
   classId: "",
   classSectionId: "",
   rollNumber: "",
+  status: "active",
 
   // Emergency contacts
   emergencyContacts: [
@@ -281,6 +282,9 @@ export default function StudentsPage() {
     "accountant",
   ].includes(role);
 
+  // Only Super Admin and Principal can edit student records.
+  const canEdit = ["superAdmin", "principal"].includes(role);
+
   const isTeacher = role === "teacher";
   const isStudent = role === "student";
 
@@ -300,12 +304,20 @@ export default function StudentsPage() {
     String(new Date().getFullYear())
   );
 
+  const academicYears = useMemo(() => {
+  const currentYear = new Date().getFullYear();
+
+  return Array.from({ length: 6 }, (_, index) =>
+    String(currentYear - index)
+  );
+}, []);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
   const [error, setError] = useState("");
 
   const [showForm, setShowForm] = useState(false);
+  const [editingStudentId, setEditingStudentId] = useState(null);
   const [form, setForm] = useState(initialForm);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState("");
@@ -491,8 +503,7 @@ export default function StudentsPage() {
     }));
   }
 
-  function handleEmergencyChange(index, event) {
-    const { name, value } = event.target;
+  function handleEmergencyChange(index, event) {    const { name, value } = event.target;
 
     setForm((previous) => ({
       ...previous,
@@ -539,6 +550,108 @@ export default function StudentsPage() {
     });
 
     setFormError("");
+    setEditingStudentId(null);
+  }
+
+  async function handleEditStudent(studentId) {
+    try {
+      setFormError("");
+      setSuccessMessage("");
+      setError("");
+      setSaving(true);
+
+      const response = await fetch(`/api/students/${studentId}`, {
+        method: "GET",
+        cache: "no-store",
+      });
+
+      const result = await response.json();
+
+      if (!response.ok || !result.success) {
+        throw new Error(
+          result.message || "Unable to load student information."
+        );
+      }
+
+      const {
+        student,
+        guardian,
+        address,
+        enrollments,
+        emergencyContacts,
+      } = result.data;
+
+      const enrollment =
+        enrollments?.find((item) => item.isActive) || enrollments?.[0];
+
+      if (!student || !enrollment) {
+        throw new Error(
+          "Student information or academic enrollment was not found."
+        );
+      }
+
+      setForm({
+        admissionNumber: student.admissionNumber || "",
+        firstName: student.firstName || "",
+        lastName: student.lastName || "",
+        email: student.email || "",
+        phone: student.phone || "",
+        dateOfBirth: student.dateOfBirth
+          ? String(student.dateOfBirth).slice(0, 10)
+          : "",
+        gender: student.gender || "",
+        bloodGroup: student.bloodGroup || "",
+        religion: student.religion || "",
+        photoUrl: student.photoUrl || "",
+        previousSchool: student.previousSchool || "",
+        previousClass: student.previousClass || "",
+
+        fatherName: guardian?.fatherName || "",
+        fatherPhone: guardian?.fatherPhone || "",
+        fatherOccupation: guardian?.fatherOccupation || "",
+        motherName: guardian?.motherName || "",
+        motherPhone: guardian?.motherPhone || "",
+        motherOccupation: guardian?.motherOccupation || "",
+        guardianName: guardian?.guardianName || "",
+        guardianRelationship: guardian?.guardianRelationship || "",
+        guardianPhone: guardian?.guardianPhone || "",
+
+        village: address?.village || "",
+        postOffice: address?.postOffice || "",
+        postalCode: address?.postalCode || "",
+        unionName: address?.unionName || "",
+        upazila: address?.upazila || "",
+        district: address?.district || "",
+        presentAddress: address?.presentAddress || "",
+        permanentAddress: address?.permanentAddress || "",
+
+        admissionDate: student.admissionDate
+          ? String(student.admissionDate).slice(0, 10)
+          : "",
+        academicYear: enrollment.academicYear || "",
+        classId: enrollment.classId || "",
+        classSectionId: enrollment.classSectionId || "",
+        rollNumber: enrollment.rollNumber || "",
+        status: student.status || "active",
+
+        emergencyContacts: emergencyContacts?.length
+          ? emergencyContacts.map((contact) => ({
+              contactName: contact.contactName || "",
+              relationship: contact.relationship || "",
+              phone: contact.phone || "",
+            }))
+          : [{ contactName: "", relationship: "", phone: "" }],
+      });
+
+      setEditingStudentId(studentId);
+      setShowForm(true);
+
+      window.scrollTo({ top: 0, behavior: "smooth" });
+    } catch (err) {
+      setError(err.message || "Unable to load student information.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   async function handleRegister(event) {
@@ -621,13 +734,20 @@ export default function StudentsPage() {
         emergencyContacts: validEmergencyContacts,
       };
 
-      const response = await fetch("/api/students", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(payload),
-      });
+      const wasEditing = Boolean(editingStudentId);
+
+      const response = await fetch(
+        editingStudentId
+          ? `/api/students/${editingStudentId}`
+          : "/api/students",
+        {
+          method: editingStudentId ? "PUT" : "POST",
+          headers: {
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify(payload),
+        }
+      );
 
       const result = await response.json();
 
@@ -637,23 +757,21 @@ export default function StudentsPage() {
         );
       }
 
-      const registeredName = [
-        result.data.firstName,
-        result.data.lastName,
-      ]
+      const savedName = [form.firstName, form.lastName]
         .filter(Boolean)
         .join(" ");
+
+      setSuccessMessage(
+        wasEditing
+          ? `Student ${savedName} updated successfully.`
+          : `Student ${savedName} registered successfully.`
+      );
 
       resetRegistrationForm();
       setShowForm(false);
       setSearch("");
       setStatus("");
       setPage(1);
-
-      setSuccessMessage(
-        `Student ${registeredName} registered successfully.`
-      );
-
       setRefreshKey((previous) => previous + 1);
     } catch (err) {
       setFormError(
@@ -752,7 +870,13 @@ export default function StudentsPage() {
             <button
               type="button"
               onClick={() => {
-                setShowForm((value) => !value);
+                if (showForm) {
+                  setShowForm(false);
+                  resetRegistrationForm();
+                } else {
+                  resetRegistrationForm();
+                  setShowForm(true);
+                }
                 setFormError("");
               }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
@@ -787,7 +911,7 @@ export default function StudentsPage() {
 
           <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
             <h2 className="font-bold text-slate-900">
-              Register New Student
+              {editingStudentId ? "Edit Student Information" : "Register New Student"}
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
@@ -879,7 +1003,7 @@ export default function StudentsPage() {
                   {age !== "" && (
                     <p className="mt-1.5 text-xs font-medium text-blue-600">
                       Calculated age: {age} years
-                    </p>
+                                        </p>
                   )}
                 </div>
 
@@ -889,10 +1013,12 @@ export default function StudentsPage() {
                   value={form.gender}
                   onChange={handleFormChange}
                   options={[
+                    { value: "", label: "Select gender" },
                     { value: "male", label: "Male" },
                     { value: "female", label: "Female" },
                     { value: "other", label: "Other" },
                   ]}
+                  required
                 />
 
                 <FormSelect
@@ -901,6 +1027,7 @@ export default function StudentsPage() {
                   value={form.bloodGroup}
                   onChange={handleFormChange}
                   options={[
+                    { value: "", label: "Select blood group" },
                     { value: "A+", label: "A+" },
                     { value: "A-", label: "A-" },
                     { value: "B+", label: "B+" },
@@ -918,20 +1045,22 @@ export default function StudentsPage() {
                   value={form.religion}
                   onChange={handleFormChange}
                   options={[
+                    { value: "", label: "Select religion" },
                     { value: "Islam", label: "Islam" },
                     { value: "Hinduism", label: "Hinduism" },
-                    { value: "Buddhism", label: "Buddhism" },
                     { value: "Christianity", label: "Christianity" },
+                    { value: "Buddhism", label: "Buddhism" },
                     { value: "Other", label: "Other" },
                   ]}
                 />
 
                 <FormField
-                  label="Student Photo URL"
+                  label="Photo URL"
                   name="photoUrl"
                   value={form.photoUrl}
                   onChange={handleFormChange}
-                  placeholder="Photo URL (optional)"
+                  placeholder="https://example.com/photo.jpg"
+                  maxLength={1000}
                 />
 
                 <FormField
@@ -940,7 +1069,7 @@ export default function StudentsPage() {
                   value={form.previousSchool}
                   onChange={handleFormChange}
                   placeholder="Previous school name"
-                  maxLength={200}
+                  maxLength={255}
                 />
 
                 <FormField
@@ -949,25 +1078,18 @@ export default function StudentsPage() {
                   value={form.previousClass}
                   onChange={handleFormChange}
                   placeholder="e.g. Class 5"
-                  maxLength={50}
+                  maxLength={100}
                 />
               </div>
             </section>
 
-            {/* Academic admission */}
+            {/* Admission and academic information */}
             <section>
               <SectionHeading
-                icon={BookOpen}
-                title="Academic Admission"
-                description="Select the student's class, section and admission details."
+                icon={GraduationCap}
+                title="Admission & Academic Information"
+                description="Assign the student to an academic year, class and section."
               />
-
-              {classesError && (
-                <div className="mb-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
-                  <AlertCircle size={17} className="shrink-0" />
-                  <span>{classesError}</span>
-                </div>
-              )}
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
 
@@ -987,7 +1109,46 @@ export default function StudentsPage() {
                   onChange={handleFormChange}
                   placeholder="e.g. 2026"
                   required
-                  maxLength={20}
+                  maxLength={4}
+                />
+
+                <FormSelect
+                  label="Class"
+                  name="classId"
+                  value={form.classId}
+                  onChange={(event) => {
+                    const selectedClassId = event.target.value;
+
+                    setForm((previous) => ({
+                      ...previous,
+                      classId: selectedClassId,
+                      classSectionId: "",
+                    }));
+                  }}
+                  options={[
+                    { value: "", label: "Select class" },
+                    ...classes.map((schoolClass) => ({
+                      value: schoolClass.id,
+                      label: schoolClass.name,
+                    })),
+                  ]}
+                  required
+                />
+
+                <FormSelect
+                  label="Section / Group"
+                  name="classSectionId"
+                  value={form.classSectionId}
+                  onChange={handleFormChange}
+                  options={[
+                    { value: "", label: "Select section" },
+                    ...availableSections.map((section) => ({
+                      value: section.id,
+                      label: section.name,
+                    })),
+                  ]}
+                  disabled={!form.classId || availableSections.length === 0}
+                  required
                 />
 
                 <FormField
@@ -995,90 +1156,34 @@ export default function StudentsPage() {
                   name="rollNumber"
                   value={form.rollNumber}
                   onChange={handleFormChange}
-                  placeholder="e.g. 01"
+                  placeholder="Enter roll number"
                   required
-                  maxLength={30}
+                  maxLength={20}
                 />
 
-                <div>
-                  <label className={LABEL_CLASS}>
-                    Class <span className="text-red-500">*</span>
-                  </label>
-
-                  <select
-                    name="classId"
-                    value={form.classId}
-                    onChange={handleClassChange}
-                    required
-                    disabled={classesLoading || classes.length === 0}
-                    className={`${INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-slate-50`}
-                  >
-                    <option value="">
-                      {classesLoading
-                        ? "Loading classes..."
-                        : "Select class"}
-                    </option>
-
-                    {classes.map((item) => (
-                      <option
-                        key={item.id}
-                        value={item.id}
-                      >
-                        {item.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div>
-                  <label className={LABEL_CLASS}>
-                    Section / Group{" "}
-                    <span className="text-red-500">*</span>
-                  </label>
-
-                  <select
-                    name="classSectionId"
-                    value={form.classSectionId}
+                {editingStudentId && (
+                  <FormSelect
+                    label="Student Status"
+                    name="status"
+                    value={form.status}
                     onChange={handleFormChange}
-                    required
-                    disabled={
-                      !form.classId ||
-                      availableSections.length === 0
-                    }
-                    className={`${INPUT_CLASS} disabled:cursor-not-allowed disabled:bg-slate-50`}
-                  >
-                    <option value="">
-                      {!form.classId
-                        ? "Select class first"
-                        : "Select section"}
-                    </option>
-
-                    {availableSections.map((section) => (
-                      <option
-                        key={section.id}
-                        value={section.id}
-                      >
-                        {section.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+                    options={[
+                      { value: "active", label: "Active" },
+                      { value: "inactive", label: "Inactive" },
+                      { value: "graduated", label: "Graduated" },
+                      { value: "transferred", label: "Transferred" },
+                    ]}
+                  />
+                )}
               </div>
-
-              {classes.length === 0 && !classesLoading && !classesError && (
-                <p className="mt-3 text-xs text-amber-700">
-                  No active classes are available. Please check
-                  Academic Management.
-                </p>
-              )}
             </section>
 
             {/* Father information */}
             <section>
               <SectionHeading
-                icon={UsersRound}
+                icon={User}
                 title="Father's Information"
-                description="Father's name and contact information."
+                description="Father or first parent contact information."
               />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1096,8 +1201,8 @@ export default function StudentsPage() {
                   name="fatherPhone"
                   value={form.fatherPhone}
                   onChange={handleFormChange}
-                  placeholder="01XXXXXXXXX"
                   type="tel"
+                  placeholder="01XXXXXXXXX"
                   maxLength={30}
                 />
 
@@ -1115,9 +1220,9 @@ export default function StudentsPage() {
             {/* Mother information */}
             <section>
               <SectionHeading
-                icon={UsersRound}
+                icon={User}
                 title="Mother's Information"
-                description="Mother's name and contact information."
+                description="Mother or second parent contact information."
               />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1135,8 +1240,8 @@ export default function StudentsPage() {
                   name="motherPhone"
                   value={form.motherPhone}
                   onChange={handleFormChange}
-                  placeholder="01XXXXXXXXX"
                   type="tel"
+                  placeholder="01XXXXXXXXX"
                   maxLength={30}
                 />
 
@@ -1154,8 +1259,8 @@ export default function StudentsPage() {
             {/* Guardian information */}
             <section>
               <SectionHeading
-                icon={Users}
-                title="Additional Guardian"
+                icon={UsersRound}
+                title="Guardian Information"
                 description="Optional alternative guardian details."
               />
 
@@ -1183,8 +1288,8 @@ export default function StudentsPage() {
                   name="guardianPhone"
                   value={form.guardianPhone}
                   onChange={handleFormChange}
-                  placeholder="01XXXXXXXXX"
                   type="tel"
+                  placeholder="01XXXXXXXXX"
                   maxLength={30}
                 />
               </div>
@@ -1195,7 +1300,7 @@ export default function StudentsPage() {
               <SectionHeading
                 icon={MapPin}
                 title="Address Information"
-                description="Bangladesh address and present/permanent address details."
+                description="Student's present and permanent address."
               />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
@@ -1254,32 +1359,24 @@ export default function StudentsPage() {
                 />
 
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label className={LABEL_CLASS}>
-                    Present Address
-                  </label>
-
-                  <textarea
+                  <FormField
+                    label="Present Address"
                     name="presentAddress"
                     value={form.presentAddress}
                     onChange={handleFormChange}
-                    rows={3}
-                    placeholder="Enter present address"
-                    className={`${INPUT_CLASS} resize-y`}
+                    placeholder="Enter complete present address"
+                    maxLength={1000}
                   />
                 </div>
 
                 <div className="sm:col-span-2 lg:col-span-3">
-                  <label className={LABEL_CLASS}>
-                    Permanent Address
-                  </label>
-
-                  <textarea
+                  <FormField
+                    label="Permanent Address"
                     name="permanentAddress"
                     value={form.permanentAddress}
                     onChange={handleFormChange}
-                    rows={3}
-                    placeholder="Enter permanent address"
-                    className={`${INPUT_CLASS} resize-y`}
+                    placeholder="Enter complete permanent address"
+                    maxLength={1000}
                   />
                 </div>
               </div>
@@ -1287,27 +1384,17 @@ export default function StudentsPage() {
 
             {/* Emergency contacts */}
             <section>
-              <div className="mb-5 flex flex-col justify-between gap-3 border-b border-slate-100 pb-4 sm:flex-row sm:items-center">
-                <div className="flex items-start gap-3">
-                  <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
-                    <Phone size={18} />
-                  </div>
-
-                  <div>
-                    <h3 className="text-sm font-bold text-slate-900">
-                      Emergency Contacts
-                    </h3>
-
-                    <p className="mt-1 text-xs text-slate-500">
-                      Add people the school can contact in an emergency.
-                    </p>
-                  </div>
-                </div>
+              <div className="mb-4 flex flex-col justify-between gap-3 sm:flex-row sm:items-center">
+                <SectionHeading
+                  icon={Phone}
+                  title="Emergency Contacts"
+                  description="Add people the school can contact in an emergency."
+                />
 
                 <button
                   type="button"
                   onClick={addEmergencyContact}
-                  className="inline-flex items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
+                  className="inline-flex shrink-0 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100"
                 >
                   <Plus size={15} />
                   Add Contact
@@ -1321,18 +1408,15 @@ export default function StudentsPage() {
                     className="rounded-xl border border-slate-200 bg-slate-50/70 p-4"
                   >
                     <div className="mb-3 flex items-center justify-between">
-                      <p className="text-xs font-bold text-slate-700">
+                      <p className="text-sm font-semibold text-slate-700">
                         Emergency Contact {index + 1}
                       </p>
 
                       {form.emergencyContacts.length > 1 && (
                         <button
                           type="button"
-                          onClick={() =>
-                            removeEmergencyContact(index)
-                          }
-                          aria-label={`Remove emergency contact ${index + 1}`}
-                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-semibold text-red-600 transition hover:bg-red-50"
+                          onClick={() => removeEmergencyContact(index)}
+                          className="inline-flex items-center gap-1 rounded-lg px-2 py-1 text-xs font-medium text-red-600 transition hover:bg-red-50"
                         >
                           <Trash2 size={14} />
                           Remove
@@ -1340,7 +1424,7 @@ export default function StudentsPage() {
                       )}
                     </div>
 
-                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                    <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                       <FormField
                         label="Contact Name"
                         name="contactName"
@@ -1349,6 +1433,7 @@ export default function StudentsPage() {
                           handleEmergencyChange(index, event)
                         }
                         placeholder="Full name"
+                        maxLength={150}
                       />
 
                       <FormField
@@ -1358,7 +1443,8 @@ export default function StudentsPage() {
                         onChange={(event) =>
                           handleEmergencyChange(index, event)
                         }
-                        placeholder="e.g. Uncle"
+                        placeholder="e.g. Uncle, Aunt"
+                        maxLength={100}
                       />
 
                       <FormField
@@ -1366,10 +1452,10 @@ export default function StudentsPage() {
                         name="phone"
                         value={contact.phone}
                         onChange={(event) =>
-                          handleEmergencyChange(index, event)
-                        }
+                          handleEmergencyChange(index, event)                        }
                         placeholder="01XXXXXXXXX"
                         type="tel"
+                        maxLength={30}
                       />
                     </div>
                   </div>
@@ -1378,7 +1464,7 @@ export default function StudentsPage() {
             </section>
 
             {/* Form actions */}
-            <div className="flex flex-col-reverse justify-end gap-2 border-t border-slate-100 pt-5 sm:flex-row">
+            <div className="flex flex-col-reverse gap-3 border-t border-slate-100 pt-5 sm:flex-row sm:justify-end">
               <button
                 type="button"
                 onClick={() => {
@@ -1386,182 +1472,179 @@ export default function StudentsPage() {
                   resetRegistrationForm();
                 }}
                 disabled={saving}
-                className="rounded-xl border border-slate-200 px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
+                className="rounded-xl border border-slate-200 bg-white px-5 py-2.5 text-sm font-semibold text-slate-600 transition hover:bg-slate-50 disabled:opacity-50"
               >
                 Cancel
               </button>
 
               <button
                 type="submit"
-                disabled={saving || classesLoading}
-                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-5 py-2.5 text-sm font-semibold text-white transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
+                disabled={saving}
+                className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700 disabled:cursor-not-allowed disabled:opacity-60"
               >
                 {saving ? (
-                  <Loader2
-                    size={16}
-                    className="animate-spin"
-                  />
+                  <Loader2 size={17} className="animate-spin" />
                 ) : (
-                  <UserPlus size={16} />
+                  <CheckCircle2 size={17} />
                 )}
 
-                {saving ? "Registering..." : "Register Student"}
+                {saving
+                  ? "Saving..."
+                  : editingStudentId
+                    ? "Update Student"
+                    : "Register Student"}
               </button>
             </div>
           </form>
         </section>
       )}
 
-      {/* Statistics */}
-      <div className="grid grid-cols-1 gap-3 sm:grid-cols-3">
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">
-            Total Students
-          </p>
+      {/* Student statistics */}
+      <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                Total Students
+              </p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {pagination.totalItems ?? 0}
+              </p>
+            </div>
 
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {pagination.total}
-          </p>
-
-          <p className="mt-1 text-[11px] text-slate-400">
-            Matching current filters
-          </p>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-blue-50 text-blue-600">
+              <Users size={22} />
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">
-            Current Page
-          </p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                Current Academic Year
+              </p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {academicYear || "All"}
+              </p>
+            </div>
 
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {pagination.totalPages ? page : 0}
-          </p>
-
-          <p className="mt-1 text-[11px] text-slate-400">
-            Of {pagination.totalPages} pages
-          </p>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-emerald-50 text-emerald-600">
+              <CalendarDays size={22} />
+            </div>
+          </div>
         </div>
 
-        <div className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm">
-          <p className="text-xs font-medium text-slate-500">
-            Records Per Page
-          </p>
+        <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm sm:col-span-2 lg:col-span-1">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-slate-500">
+                Current Page
+              </p>
+              <p className="mt-2 text-2xl font-bold text-slate-900">
+                {pagination.page || 1}
+                <span className="ml-1 text-base font-medium text-slate-400">
+                  / {pagination.totalPages || 1}
+                </span>
+              </p>
+            </div>
 
-          <p className="mt-2 text-2xl font-bold text-slate-900">
-            {PAGE_SIZE}
-          </p>
-
-          <p className="mt-1 text-[11px] text-slate-400">
-            Maximum displayed per page
-          </p>
+            <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-50 text-violet-600">
+              <BookOpen size={22} />
+            </div>
+          </div>
         </div>
       </div>
 
-      {/* Search and filters */}
-      <section className="rounded-2xl border border-slate-200 bg-white p-4 shadow-sm sm:p-5">
-        <div className="flex flex-col gap-3 lg:flex-row lg:items-end">
-          <div className="flex-1">
-            <label className={LABEL_CLASS}>
-              Search Students
-            </label>
+      {/* Directory */}
+      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+        <div className="border-b border-slate-100 p-5 sm:p-6">
+          <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
+            <div>
+              <h2 className="font-bold text-slate-900">
+                Student Directory
+              </h2>
 
-            <div className="relative">
-              <Search
-                size={18}
-                className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
-              />
+              <p className="mt-1 text-xs text-slate-500">
+                Search and manage registered students.
+              </p>
+            </div>
 
-              <input
-                type="search"
-                value={search}
+            <div className="flex flex-col gap-3 sm:flex-row">
+              <div className="relative flex-1 sm:min-w-[240px]">
+                <Search
+                  size={17}
+                  className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"
+                />
+
+                <input
+                  type="search"
+                  value={search}
+                  onChange={(event) => {
+                    setSearch(event.target.value);
+                    setPage(1);
+                  }}
+                  placeholder="Search name or admission number..."
+                  className="w-full rounded-xl border border-slate-200 bg-white py-2.5 pl-10 pr-3 text-sm outline-none transition placeholder:text-slate-400 focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                />
+              </div>
+
+              <select
+                value={status}
                 onChange={(event) => {
-                  setSearch(event.target.value);
+                  setStatus(event.target.value);
                   setPage(1);
                 }}
-                placeholder="Search by name, admission number, email or phone..."
-                className={`${INPUT_CLASS} pl-10`}
-              />
-            </div>
-          </div>
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">All Statuses</option>
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="graduated">Graduated</option>
+                <option value="transferred">Transferred</option>
+              </select>
 
-          <div className="w-full lg:w-52">
-            <label className={LABEL_CLASS}>
-              Student Status
-            </label>
-
-            <select
-              value={status}
-              onChange={(event) => {
-                setStatus(event.target.value);
-                setPage(1);
-              }}
-              className={INPUT_CLASS}
-            >
-              <option value="">All Statuses</option>
-              <option value="active">Active</option>
-              <option value="inactive">Inactive</option>
-              <option value="graduated">Graduated</option>
-            </select>
-          </div>
-
-          {isTeacher && (
-            <div className="w-full lg:w-44">
-              <label className={LABEL_CLASS}>
-                Academic Year
-              </label>
-
-              <input
+              <select
                 value={academicYear}
                 onChange={(event) => {
-                  setAcademicYear(event.target.value);
+                  setSelectedAcademicYear(event.target.value);
                   setPage(1);
                 }}
-                placeholder="2026"
-                maxLength={9}
-                className={INPUT_CLASS}
-              />
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+              >
+                <option value="">All Academic Years</option>
+                {academicYears.map((year) => (
+                  <option key={year} value={year}>
+                    {year}
+                  </option>
+                ))}
+              </select>
             </div>
-          )}
-        </div>
-      </section>
-
-      {/* Student directory */}
-      <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex flex-col justify-between gap-2 border-b border-slate-100 px-5 py-4 sm:flex-row sm:items-center">
-          <div>
-            <h2 className="font-bold text-slate-900">
-              Student Directory
-            </h2>
-
-            <p className="mt-1 text-xs text-slate-500">
-              {pagination.total} student record(s) found
-            </p>
           </div>
-
-          <span className="text-xs font-medium text-slate-400">
-            Showing {students.length} of {pagination.total}
-          </span>
         </div>
 
         {error && (
-          <div className="m-4 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-700">
+          <div className="m-5 flex items-start gap-2 rounded-xl border border-red-200 bg-red-50 p-3 text-sm text-red-700">
             <AlertCircle size={18} className="shrink-0" />
             <span>{error}</span>
           </div>
         )}
 
+        {/* Loading */}
         {loading ? (
-          <div className="flex min-h-64 items-center justify-center gap-3 text-sm text-slate-500">
+          <div className="flex min-h-[240px] flex-col items-center justify-center gap-3">
             <Loader2
-              size={22}
+              size={30}
               className="animate-spin text-blue-600"
             />
-            Loading student records...
+            <p className="text-sm text-slate-500">
+              Loading students...
+            </p>
           </div>
-        ) : error ? null : students.length === 0 ? (
-          <div className="flex min-h-64 flex-col items-center justify-center px-5 text-center">
+        ) : students.length === 0 ? (
+          <div className="flex min-h-[260px] flex-col items-center justify-center px-5 text-center">
             <div className="flex h-14 w-14 items-center justify-center rounded-2xl bg-slate-100 text-slate-400">
-              <Users size={26} />
+              <Users size={27} />
             </div>
 
             <h3 className="mt-4 font-semibold text-slate-800">
@@ -1569,17 +1652,19 @@ export default function StudentsPage() {
             </h3>
 
             <p className="mt-1 max-w-sm text-sm text-slate-500">
-              No student records match your search. Register a new
-              student or adjust your filters.
+              {search || status || selectedAcademicYear
+                ? "Try changing your search or filters."
+                : "No students have been registered yet."}
             </p>
 
-            {canCreate && (
+            {canCreate && !search && !status && !selectedAcademicYear && (
               <button
                 type="button"
                 onClick={() => setShowForm(true)}
-                className="mt-4 text-sm font-semibold text-blue-600 hover:text-blue-700"
+                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
               >
-                Register your first student
+                <UserPlus size={16} />
+                Register First Student
               </button>
             )}
           </div>
@@ -1587,16 +1672,16 @@ export default function StudentsPage() {
           <>
             {/* Desktop table */}
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[850px] text-left">
+              <table className="w-full min-w-[900px] text-left">
                 <thead className="bg-slate-50">
-                  <tr className="text-[10px] font-bold uppercase tracking-wider text-slate-500">
-                    <th className="px-5 py-3.5">Student</th>
-                    <th className="px-5 py-3.5">Admission No.</th>
-                    <th className="px-5 py-3.5">Contact</th>
-                    <th className="px-5 py-3.5">Date of Birth</th>
-                    <th className="px-5 py-3.5">Status</th>
-                        <th className="px-5 py-3.5">Registered</th>
-                        <th className="px-5 py-3.5">Action</th>
+                  <tr className="border-b border-slate-100 text-xs font-semibold uppercase tracking-wider text-slate-500">
+                    <th className="px-5 py-4">Student</th>
+                    <th className="px-5 py-4">Admission No.</th>
+                    <th className="px-5 py-4">Class / Section</th>
+                    <th className="px-5 py-4">Roll</th>
+                    <th className="px-5 py-4">Phone</th>
+                    <th className="px-5 py-4">Status</th>
+                    <th className="px-5 py-4 text-right">Actions</th>
                   </tr>
                 </thead>
 
@@ -1608,18 +1693,24 @@ export default function StudentsPage() {
                     >
                       <td className="px-5 py-4">
                         <div className="flex items-center gap-3">
-                          <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-bold text-blue-700">
-                            {student.firstName?.charAt(0)}
-                            {student.lastName?.charAt(0) || ""}
-                          </div>
+                          {student.photoUrl ? (
+                            <img
+                              src={student.photoUrl}
+                              alt={`${student.firstName} ${student.lastName || ""}`}
+                              className="h-10 w-10 rounded-full border border-slate-200 object-cover"
+                            />
+                          ) : (
+                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">
+                              {student.firstName?.charAt(0)?.toUpperCase() || "S"}
+                            </div>
+                          )}
 
                           <div>
-                            <p className="text-sm font-semibold text-slate-800">
+                            <p className="font-semibold text-slate-800">
                               {student.firstName} {student.lastName}
                             </p>
-
-                            <p className="mt-0.5 text-[11px] text-slate-400">
-                              Student
+                            <p className="mt-0.5 text-xs text-slate-400">
+                              {student.email || "No email"}
                             </p>
                           </div>
                         </div>
@@ -1630,146 +1721,194 @@ export default function StudentsPage() {
                       </td>
 
                       <td className="px-5 py-4">
-                        <p className="text-xs text-slate-700">
-                          {student.phone || "No phone"}
+                        <p className="text-sm font-medium text-slate-700">
+                          {student.className || "—"}
                         </p>
-
-                        <p className="mt-1 text-xs text-slate-400">
-                          {student.email || "No email"}
+                        <p className="mt-0.5 text-xs text-slate-400">
+                          {student.sectionName || "—"}
                         </p>
                       </td>
 
-                      <td className="px-5 py-4 text-xs text-slate-600">
-                        {formatDate(student.dateOfBirth)}
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {student.rollNumber || "—"}
+                      </td>
+
+                      <td className="px-5 py-4 text-sm text-slate-600">
+                        {student.phone || "—"}
                       </td>
 
                       <td className="px-5 py-4">
                         <span
-                          className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ring-1 ring-inset ${getStatusStyle(student.status)}`}
+                          className={`inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusStyle(student.status)}`}
                         >
-                          {student.status}
+                          {student.status || "active"}
                         </span>
                       </td>
 
-                      <td className="px-5 py-4 text-xs text-slate-500">
-                        {formatDate(student.createdAt)}
-                      </td>
-
                       <td className="px-5 py-4">
-  <a
-    href={`/admin/students/${student.id}`}
-    className="inline-flex items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-700 transition hover:bg-slate-50"
-  >
-    <Eye size={15} />
-    View Details
-  </a>
-</td> 
+                        <div className="flex items-center justify-end gap-2">
+                          <a
+                            href={`/admin/students/${student.id}`}
+                            className="inline-flex items-center gap-1.5 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:border-blue-200 hover:bg-blue-50 hover:text-blue-700"
+                          >
+                            <Eye size={14} />
+                            View
+                          </a>
+
+                          {canEdit && (
+                            <button
+                              type="button"
+                              onClick={() => handleEditStudent(student.id)}
+                              disabled={saving}
+                              className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                            >
+                              <Pencil size={14} />
+                              Edit
+                            </button>
+                          )}
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>
               </table>
             </div>
 
-            
-  {/* Mobile cards */}
-   <div className="divide-y divide-slate-100 md:hidden">
-  {students.map((student) => (
-    <article
-      key={student.id}
-      className="p-4"
-    >
-      <div className="flex items-start gap-3">
-        <div className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-blue-50 text-sm font-bold text-blue-700">
-          {student.firstName?.charAt(0)}
-          {student.lastName?.charAt(0) || ""}
-        </div>
+            {/* Mobile student cards */}
+            <div className="space-y-3 p-4 md:hidden">
+              {students.map((student) => (
+                <div
+                  key={student.id}
+                  className="rounded-xl border border-slate-200 p-4"
+                >
+                  <div className="flex items-start gap-3">
+                    {student.photoUrl ? (
+                      <img
+                        src={student.photoUrl}
+                        alt={`${student.firstName} ${student.lastName || ""}`}
+                        className="h-12 w-12 rounded-full border border-slate-200 object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-600">
+                        {student.firstName?.charAt(0)?.toUpperCase() || "S"}
+                      </div>
+                    )}
 
-        <div className="min-w-0 flex-1">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h3 className="text-sm font-bold text-slate-900">
-              {student.firstName} {student.lastName}
-            </h3>
+                    <div className="min-w-0 flex-1">
+                      <p className="truncate font-semibold text-slate-900">
+                        {student.firstName} {student.lastName}
+                      </p>
 
-            <span
-              className={`rounded-full px-2.5 py-1 text-[10px] font-bold capitalize ring-1 ring-inset ${getStatusStyle(student.status)}`}
-            >
-              {student.status}
-            </span>
-          </div>
+                      <p className="mt-0.5 text-xs text-slate-500">
+                        {student.admissionNumber}
+                      </p>
 
-          <p className="mt-1 text-xs font-medium text-slate-500">
-            {student.admissionNumber}
-          </p>
+                      <span
+                        className={`mt-2 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold ${getStatusStyle(student.status)}`}
+                      >
+                        {student.status || "active"}
+                      </span>
+                    </div>
+                  </div>
 
-          <div className="mt-3 space-y-2 text-xs text-slate-500">
-            <p className="flex items-center gap-2 break-all">
-              <Phone size={14} className="shrink-0" />
-              {student.phone || "No phone number"}
-            </p>
+                  <div className="mt-4 grid grid-cols-2 gap-3 border-t border-slate-100 pt-3">
+                    <div>
+                      <p className="text-[11px] font-medium uppercase text-slate-400">
+                        Class / Section
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        {student.className || "—"} / {student.sectionName || "—"}
+                      </p>
+                    </div>
 
-            <p className="flex items-center gap-2 break-all">
-              <Mail size={14} className="shrink-0" />
-              {student.email || "No email address"}
-            </p>
+                    <div>
+                      <p className="text-[11px] font-medium uppercase text-slate-400">
+                        Roll Number
+                      </p>
+                      <p className="mt-1 text-sm font-medium text-slate-700">
+                        {student.rollNumber || "—"}
+                      </p>
+                    </div>
 
-            <p className="flex items-center gap-2">
-              <CalendarDays size={14} className="shrink-0" />
-              Date of birth: {formatDate(student.dateOfBirth)}
-            </p>
-          </div>
-        </div>
-      </div>
+                    <div className="col-span-2">
+                      <p className="text-[11px] font-medium uppercase text-slate-400">
+                        Phone
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        {student.phone || "—"}
+                      </p>
+                    </div>
+                  </div>
 
-      {/* View Student Details button */}
-      <a
-        href={`/admin/students/${student.id}`}
-        className="mt-4 inline-flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 px-4 py-2.5 text-sm font-semibold text-slate-700 transition hover:bg-slate-50"
-      >
-        <Eye size={16} />
-        View Student Details
-      </a>
-    </article>
-  ))}
-</div>
+                  <div className="mt-4 flex flex-wrap gap-2 border-t border-slate-100 pt-3">
+                    <a
+                      href={`/admin/students/${student.id}`}
+                      className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-slate-200 px-3 py-2.5 text-xs font-semibold text-slate-600 transition hover:bg-slate-50"
+                    >
+                      <Eye size={15} />
+                      View Details
+                    </a>
 
-                
+                    {canEdit && (
+                      <button
+                        type="button"
+                        onClick={() => handleEditStudent(student.id)}
+                        disabled={saving}
+                        className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
+                      >
+                        <Pencil size={15} />
+                        Edit
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
           </>
         )}
 
         {/* Pagination */}
-        {!loading &&
-          !error &&
-          pagination.totalPages > 0 && (
-            <div className="flex flex-col justify-between gap-3 border-t border-slate-100 px-4 py-4 sm:flex-row sm:items-center sm:px-5">
-              <p className="text-xs text-slate-500">
-                Page {page} of {pagination.totalPages}
-                {" · "}
-                {pagination.total} total records
-              </p>
+        {!loading && pagination.totalItems > 0 && (
+          <div className="flex flex-col gap-3 border-t border-slate-100 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-xs text-slate-500">
+              Showing{" "}
+              <span className="font-semibold text-slate-700">
+                {pagination.startItem ?? 0}–{pagination.endItem ?? 0}
+              </span>{" "}
+              of{" "}
+              <span className="font-semibold text-slate-700">
+                {pagination.totalItems}
+              </span>{" "}
+              students
+            </p>
 
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => changePage(page - 1)}
-                  disabled={page <= 1}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  <ChevronLeft size={15} />
-                  Previous
-                </button>
+            <div className="flex items-center justify-between gap-2 sm:justify-end">
+              <button
+                type="button"
+                onClick={() => changePage(page - 1)}
+                disabled={page <= 1}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                <ChevronLeft size={15} />
+                Previous
+              </button>
 
-                <button
-                  type="button"
-                  onClick={() => changePage(page + 1)}
-                  disabled={page >= pagination.totalPages}
-                  className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
-                >
-                  Next
-                  <ChevronRight size={15} />
-                </button>
-              </div>
+              <span className="px-2 text-xs font-medium text-slate-500">
+                Page {pagination.page || page} of {pagination.totalPages || 1}
+              </span>
+
+              <button
+                type="button"
+                onClick={() => changePage(page + 1)}
+                disabled={page >= pagination.totalPages}
+                className="inline-flex items-center gap-1 rounded-lg border border-slate-200 px-3 py-2 text-xs font-semibold text-slate-600 transition hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-40"
+              >
+                Next
+                <ChevronRight size={15} />
+              </button>
             </div>
-          )}
+          </div>
+        )}
       </section>
     </div>
   );
