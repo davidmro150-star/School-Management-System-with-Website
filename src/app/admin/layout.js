@@ -2,6 +2,7 @@
 import { headers } from "next/headers";
 import { redirect } from "next/navigation";
 import { auth } from "@/lib/auth";
+import AdminShell from "@/components/admin/AdminShell";
 
 const allowedRoles = [
   "superAdmin",
@@ -16,15 +17,13 @@ export default async function AdminLayout({ children }) {
     headers: await headers(),
   });
 
-  // Require login.
   if (!session) {
     redirect("/login");
   }
 
-  // Only allow the five configured roles.
   if (!allowedRoles.includes(session.user.role)) {
     redirect("/login");
   }
 
-  return children;
+  return <AdminShell>{children}</AdminShell>;
 }

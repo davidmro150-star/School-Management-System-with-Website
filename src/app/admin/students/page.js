@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -11,10 +12,8 @@ import {
   X,
   Loader2,
   GraduationCap,
-  Mail,
   Phone,
   CalendarDays,
-  Hash,
   AlertCircle,
   CheckCircle2,
   User,
@@ -23,7 +22,6 @@ import {
   UsersRound,
   Plus,
   Trash2,
-  Camera,
   Eye,
   Pencil,
 } from "lucide-react";
@@ -35,8 +33,7 @@ const PAGE_SIZE = 20;
 const INPUT_CLASS =
   "w-full rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-800 outline-none transition placeholder:text-slate-400 focus:border-blue-500 focus:ring-2 focus:ring-blue-100";
 
-const LABEL_CLASS =
-  "mb-1.5 block text-xs font-semibold text-slate-700";
+const LABEL_CLASS = "mb-1.5 block text-xs font-semibold text-slate-700";
 
 function getDhakaDate() {
   return new Intl.DateTimeFormat("en-CA", {
@@ -48,7 +45,6 @@ function getDhakaDate() {
 }
 
 const initialForm = {
-  // Student information
   admissionNumber: "",
   firstName: "",
   lastName: "",
@@ -62,22 +58,18 @@ const initialForm = {
   previousSchool: "",
   previousClass: "",
 
-  // Father information
   fatherName: "",
   fatherPhone: "",
   fatherOccupation: "",
 
-  // Mother information
   motherName: "",
   motherPhone: "",
   motherOccupation: "",
 
-  // Guardian information
   guardianName: "",
   guardianRelationship: "",
   guardianPhone: "",
 
-  // Address information
   village: "",
   postOffice: "",
   postalCode: "",
@@ -87,7 +79,6 @@ const initialForm = {
   presentAddress: "",
   permanentAddress: "",
 
-  // Admission and enrollment
   admissionDate: getDhakaDate(),
   academicYear: String(new Date().getFullYear()),
   classId: "",
@@ -95,7 +86,6 @@ const initialForm = {
   rollNumber: "",
   status: "active",
 
-  // Emergency contacts
   emergencyContacts: [
     {
       contactName: "",
@@ -110,12 +100,10 @@ function getStatusStyle(status) {
     active: "bg-emerald-50 text-emerald-700 ring-emerald-600/20",
     inactive: "bg-amber-50 text-amber-700 ring-amber-600/20",
     graduated: "bg-blue-50 text-blue-700 ring-blue-600/20",
+    transferred: "bg-orange-50 text-orange-700 ring-orange-600/20",
   };
 
-  return (
-    styles[status] ||
-    "bg-slate-100 text-slate-600 ring-slate-500/20"
-  );
+  return styles[status] || "bg-slate-100 text-slate-600 ring-slate-500/20";
 }
 
 function formatDate(dateString) {
@@ -123,9 +111,7 @@ function formatDate(dateString) {
 
   const date = new Date(dateString);
 
-  if (Number.isNaN(date.getTime())) {
-    return "—";
-  }
+  if (Number.isNaN(date.getTime())) return "—";
 
   return new Intl.DateTimeFormat("en-GB", {
     day: "2-digit",
@@ -141,27 +127,80 @@ function calculateAge(dateOfBirth) {
   const today = new Date();
   const birthDate = new Date(`${dateOfBirth}T00:00:00`);
 
-  if (
-    Number.isNaN(birthDate.getTime()) ||
-    birthDate > today
-  ) {
+  if (Number.isNaN(birthDate.getTime()) || birthDate > today) {
     return "";
   }
 
   let age = today.getFullYear() - birthDate.getFullYear();
 
-  const monthDifference =
-    today.getMonth() - birthDate.getMonth();
+  const monthDifference = today.getMonth() - birthDate.getMonth();
 
   if (
     monthDifference < 0 ||
-    (monthDifference === 0 &&
-      today.getDate() < birthDate.getDate())
+    (monthDifference === 0 && today.getDate() < birthDate.getDate())
   ) {
     age--;
   }
 
   return age;
+}
+
+/**
+ * Supports both API pagination formats:
+ *
+ * {
+ *   page, limit, total, totalPages
+ * }
+ *
+ * and:
+ *
+ * {
+ *   page, limit, totalItems, totalPages, startItem, endItem
+ * }
+ */
+function normalizePagination(pagination = {}, currentPage = 1) {
+  const page = Math.max(
+    1,
+    Number(pagination.page) || currentPage
+  );
+
+  const limit = Math.max(
+    1,
+    Number(pagination.limit) || PAGE_SIZE
+  );
+
+  const totalItems = Math.max(
+    0,
+    Number(pagination.totalItems ?? pagination.total) || 0
+  );
+
+  const totalPages = Math.max(
+    1,
+    Number(pagination.totalPages) ||
+      Math.ceil(totalItems / limit) ||
+      1
+  );
+
+  const startItem =
+    totalItems === 0
+      ? 0
+      : Number(pagination.startItem) || (page - 1) * limit + 1;
+
+  const endItem =
+    totalItems === 0
+      ? 0
+      : Number(pagination.endItem) ||
+        Math.min(page * limit, totalItems);
+
+  return {
+    page,
+    limit,
+    total: totalItems,
+    totalItems,
+    totalPages,
+    startItem,
+    endItem,
+  };
 }
 
 function SectionHeading({ icon: Icon, title, description }) {
@@ -172,14 +211,10 @@ function SectionHeading({ icon: Icon, title, description }) {
       </div>
 
       <div>
-        <h3 className="text-sm font-bold text-slate-900">
-          {title}
-        </h3>
+        <h3 className="text-sm font-bold text-slate-900">{title}</h3>
 
         {description && (
-          <p className="mt-1 text-xs text-slate-500">
-            {description}
-          </p>
+          <p className="mt-1 text-xs text-slate-500">{description}</p>
         )}
       </div>
     </div>
@@ -204,9 +239,7 @@ function FormField({
     <div className="min-w-0">
       <label className={LABEL_CLASS}>
         {label}
-        {required && (
-          <span className="ml-1 text-red-500">*</span>
-        )}
+        {required && <span className="ml-1 text-red-500">*</span>}
       </label>
 
       {children || (
@@ -242,9 +275,7 @@ function FormSelect({
     <div className="min-w-0">
       <label className={LABEL_CLASS}>
         {label}
-        {required && (
-          <span className="ml-1 text-red-500">*</span>
-        )}
+        {required && <span className="ml-1 text-red-500">*</span>}
       </label>
 
       <select
@@ -257,14 +288,13 @@ function FormSelect({
       >
         <option value="">{placeholder}</option>
 
-        {options.map((option) => (
-          <option
-            key={option.value}
-            value={option.value}
-          >
-            {option.label}
-          </option>
-        ))}
+        {options
+          .filter((option) => option.value !== "")
+          .map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
       </select>
     </div>
   );
@@ -282,7 +312,6 @@ export default function StudentsPage() {
     "accountant",
   ].includes(role);
 
-  // Only Super Admin and Principal can edit student records.
   const canEdit = ["superAdmin", "principal"].includes(role);
 
   const isTeacher = role === "teacher";
@@ -290,12 +319,9 @@ export default function StudentsPage() {
 
   const [students, setStudents] = useState([]);
 
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: PAGE_SIZE,
-    total: 0,
-    totalPages: 0,
-  });
+  const [pagination, setPagination] = useState(() =>
+    normalizePagination()
+  );
 
   const [search, setSearch] = useState("");
   const [status, setStatus] = useState("");
@@ -305,12 +331,13 @@ export default function StudentsPage() {
   );
 
   const academicYears = useMemo(() => {
-  const currentYear = new Date().getFullYear();
+    const currentYear = new Date().getFullYear();
 
-  return Array.from({ length: 6 }, (_, index) =>
-    String(currentYear - index)
-  );
-}, []);
+    return Array.from({ length: 6 }, (_, index) =>
+      String(currentYear - index)
+    );
+  }, []);
+
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(true);
   const [refreshKey, setRefreshKey] = useState(0);
@@ -323,14 +350,12 @@ export default function StudentsPage() {
   const [formError, setFormError] = useState("");
   const [successMessage, setSuccessMessage] = useState("");
 
-  // Class and section data
   const [classes, setClasses] = useState([]);
   const [classesLoading, setClassesLoading] = useState(false);
   const [classesError, setClassesError] = useState("");
 
   const selectedClass = useMemo(
-    () =>
-      classes.find((item) => item.id === form.classId) || null,
+    () => classes.find((item) => item.id === form.classId) || null,
     [classes, form.classId]
   );
 
@@ -338,9 +363,16 @@ export default function StudentsPage() {
 
   const age = calculateAge(form.dateOfBirth);
 
-  // Load students from the database.
+  // Load students.
   useEffect(() => {
     if (sessionPending || !session?.user || isStudent) {
+      return;
+    }
+
+    if (isTeacher && !academicYear) {
+      setStudents([]);
+      setPagination(normalizePagination());
+      setLoading(false);
       return;
     }
 
@@ -364,7 +396,9 @@ export default function StudentsPage() {
           params.set("status", status);
         }
 
-        if (isTeacher) {
+        // IMPORTANT:
+        // Send academicYear for every role when selected.
+        if (academicYear) {
           params.set("academicYear", academicYear);
         }
 
@@ -385,20 +419,16 @@ export default function StudentsPage() {
           );
         }
 
-        setStudents(result.data || []);
+        setStudents(Array.isArray(result.data) ? result.data : []);
 
         setPagination(
-          result.pagination || {
-            page: 1,
-            limit: PAGE_SIZE,
-            total: 0,
-            totalPages: 0,
-          }
+          normalizePagination(result.pagination, page)
         );
       } catch (err) {
         if (err.name !== "AbortError") {
           setError(err.message || "Something went wrong.");
           setStudents([]);
+          setPagination(normalizePagination());
         }
       } finally {
         if (!controller.signal.aborted) {
@@ -423,7 +453,7 @@ export default function StudentsPage() {
     refreshKey,
   ]);
 
-  // Load active classes and their active sections.
+  // Load active classes and sections.
   useEffect(() => {
     if (!session?.user || sessionPending || isStudent) {
       return;
@@ -436,14 +466,11 @@ export default function StudentsPage() {
         setClassesLoading(true);
         setClassesError("");
 
-        const response = await fetch(
-          "/api/academics/classes",
-          {
-            method: "GET",
-            cache: "no-store",
-            signal: controller.signal,
-          }
-        );
+        const response = await fetch("/api/academics/classes", {
+          method: "GET",
+          cache: "no-store",
+          signal: controller.signal,
+        });
 
         const result = await response.json();
 
@@ -493,27 +520,15 @@ export default function StudentsPage() {
     }));
   }
 
-  function handleClassChange(event) {
-    const classId = event.target.value;
-
-    setForm((previous) => ({
-      ...previous,
-      classId,
-      classSectionId: "",
-    }));
-  }
-
-  function handleEmergencyChange(index, event) {    const { name, value } = event.target;
+  function handleEmergencyChange(index, event) {
+    const { name, value } = event.target;
 
     setForm((previous) => ({
       ...previous,
       emergencyContacts: previous.emergencyContacts.map(
         (contact, contactIndex) =>
           contactIndex === index
-            ? {
-                ...contact,
-                [name]: value,
-              }
+            ? { ...contact, [name]: value }
             : contact
       ),
     }));
@@ -582,7 +597,8 @@ export default function StudentsPage() {
       } = result.data;
 
       const enrollment =
-        enrollments?.find((item) => item.isActive) || enrollments?.[0];
+        enrollments?.find((item) => item.isActive) ||
+        enrollments?.[0];
 
       if (!student || !enrollment) {
         throw new Error(
@@ -648,7 +664,9 @@ export default function StudentsPage() {
 
       window.scrollTo({ top: 0, behavior: "smooth" });
     } catch (err) {
-      setError(err.message || "Unable to load student information.");
+      setError(
+        err.message || "Unable to load student information."
+      );
     } finally {
       setSaving(false);
     }
@@ -660,10 +678,7 @@ export default function StudentsPage() {
     setFormError("");
     setSuccessMessage("");
 
-    if (
-      !form.admissionNumber.trim() ||
-      !form.firstName.trim()
-    ) {
+    if (!form.admissionNumber.trim() || !form.firstName.trim()) {
       setFormError(
         "Admission number and first name are required."
       );
@@ -678,9 +693,7 @@ export default function StudentsPage() {
     }
 
     if (!form.classId || !form.classSectionId) {
-      setFormError(
-        "Please select a class and section."
-      );
+      setFormError("Please select a class and section.");
       return;
     }
 
@@ -697,13 +710,12 @@ export default function StudentsPage() {
       return;
     }
 
-    const validEmergencyContacts = form.emergencyContacts
-      .filter(
-        (contact) =>
-          contact.contactName.trim() ||
-          contact.phone.trim() ||
-          contact.relationship.trim()
-      );
+    const validEmergencyContacts = form.emergencyContacts.filter(
+      (contact) =>
+        contact.contactName.trim() ||
+        contact.phone.trim() ||
+        contact.relationship.trim()
+    );
 
     const incompleteEmergencyContact =
       validEmergencyContacts.some(
@@ -774,23 +786,28 @@ export default function StudentsPage() {
       setPage(1);
       setRefreshKey((previous) => previous + 1);
     } catch (err) {
-      setFormError(
-        err.message || "Unable to register student."
-      );
+      setFormError(err.message || "Unable to register student.");
     } finally {
       setSaving(false);
     }
   }
 
   function changePage(nextPage) {
-    if (
-      nextPage < 1 ||
-      nextPage > pagination.totalPages
-    ) {
+    if (nextPage < 1 || nextPage > pagination.totalPages) {
       return;
     }
 
     setPage(nextPage);
+  }
+
+  function changeAcademicYear(value) {
+    // Teachers must always have a selected academic year.
+    if (isTeacher && !value) {
+      return;
+    }
+
+    setAcademicYear(value);
+    setPage(1);
   }
 
   if (sessionPending) {
@@ -833,7 +850,6 @@ export default function StudentsPage() {
 
   return (
     <div className="mx-auto w-full max-w-[1500px] space-y-6 p-4 sm:p-6 lg:p-8">
-
       {/* Page heading */}
       <div className="flex flex-col justify-between gap-4 sm:flex-row sm:items-center">
         <div className="flex items-center gap-2">
@@ -877,6 +893,7 @@ export default function StudentsPage() {
                   resetRegistrationForm();
                   setShowForm(true);
                 }
+
                 setFormError("");
               }}
               className="inline-flex items-center justify-center gap-2 rounded-xl bg-blue-600 px-4 py-2.5 text-sm font-semibold text-white shadow-sm transition hover:bg-blue-700"
@@ -908,10 +925,11 @@ export default function StudentsPage() {
       {/* Registration form */}
       {showForm && canCreate && (
         <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
-
           <div className="border-b border-slate-100 px-5 py-4 sm:px-6">
             <h2 className="font-bold text-slate-900">
-              {editingStudentId ? "Edit Student Information" : "Register New Student"}
+              {editingStudentId
+                ? "Edit Student Information"
+                : "Register New Student"}
             </h2>
 
             <p className="mt-1 text-xs text-slate-500">
@@ -940,7 +958,6 @@ export default function StudentsPage() {
               />
 
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
-
                 <FormField
                   label="Admission Number"
                   name="admissionNumber"
@@ -1003,7 +1020,7 @@ export default function StudentsPage() {
                   {age !== "" && (
                     <p className="mt-1.5 text-xs font-medium text-blue-600">
                       Calculated age: {age} years
-                                        </p>
+                    </p>
                   )}
                 </div>
 
@@ -1013,7 +1030,6 @@ export default function StudentsPage() {
                   value={form.gender}
                   onChange={handleFormChange}
                   options={[
-                    { value: "", label: "Select gender" },
                     { value: "male", label: "Male" },
                     { value: "female", label: "Female" },
                     { value: "other", label: "Other" },
@@ -1027,7 +1043,6 @@ export default function StudentsPage() {
                   value={form.bloodGroup}
                   onChange={handleFormChange}
                   options={[
-                    { value: "", label: "Select blood group" },
                     { value: "A+", label: "A+" },
                     { value: "A-", label: "A-" },
                     { value: "B+", label: "B+" },
@@ -1045,7 +1060,6 @@ export default function StudentsPage() {
                   value={form.religion}
                   onChange={handleFormChange}
                   options={[
-                    { value: "", label: "Select religion" },
                     { value: "Islam", label: "Islam" },
                     { value: "Hinduism", label: "Hinduism" },
                     { value: "Christianity", label: "Christianity" },
@@ -1091,8 +1105,13 @@ export default function StudentsPage() {
                 description="Assign the student to an academic year, class and section."
               />
 
-              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              {classesError && (
+                <p className="mb-3 rounded-lg bg-red-50 p-3 text-sm text-red-700">
+                  {classesError}
+                </p>
+              )}
 
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
                 <FormField
                   label="Admission Date"
                   name="admissionDate"
@@ -1125,13 +1144,14 @@ export default function StudentsPage() {
                       classSectionId: "",
                     }));
                   }}
-                  options={[
-                    { value: "", label: "Select class" },
-                    ...classes.map((schoolClass) => ({
-                      value: schoolClass.id,
-                      label: schoolClass.name,
-                    })),
-                  ]}
+                  options={classes.map((schoolClass) => ({
+                    value: schoolClass.id,
+                    label: schoolClass.name,
+                  }))}
+                  placeholder={
+                    classesLoading ? "Loading classes..." : "Select class"
+                  }
+                  disabled={classesLoading}
                   required
                 />
 
@@ -1140,14 +1160,15 @@ export default function StudentsPage() {
                   name="classSectionId"
                   value={form.classSectionId}
                   onChange={handleFormChange}
-                  options={[
-                    { value: "", label: "Select section" },
-                    ...availableSections.map((section) => ({
-                      value: section.id,
-                      label: section.name,
-                    })),
-                  ]}
-                  disabled={!form.classId || availableSections.length === 0}
+                  options={availableSections.map((section) => ({
+                    value: section.id,
+                    label: section.name,
+                  }))}
+                  placeholder="Select section"
+                  disabled={
+                    !form.classId ||
+                    availableSections.length === 0
+                  }
                   required
                 />
 
@@ -1178,7 +1199,7 @@ export default function StudentsPage() {
               </div>
             </section>
 
-            {/* Father information */}
+            {/* Father's information */}
             <section>
               <SectionHeading
                 icon={User}
@@ -1217,7 +1238,7 @@ export default function StudentsPage() {
               </div>
             </section>
 
-            {/* Mother information */}
+            {/* Mother's information */}
             <section>
               <SectionHeading
                 icon={User}
@@ -1452,7 +1473,8 @@ export default function StudentsPage() {
                         name="phone"
                         value={contact.phone}
                         onChange={(event) =>
-                          handleEmergencyChange(index, event)                        }
+                          handleEmergencyChange(index, event)
+                        }
                         placeholder="01XXXXXXXXX"
                         type="tel"
                         maxLength={30}
@@ -1507,8 +1529,9 @@ export default function StudentsPage() {
               <p className="text-sm font-medium text-slate-500">
                 Total Students
               </p>
+
               <p className="mt-2 text-2xl font-bold text-slate-900">
-                {pagination.totalItems ?? 0}
+                {pagination.totalItems}
               </p>
             </div>
 
@@ -1524,6 +1547,7 @@ export default function StudentsPage() {
               <p className="text-sm font-medium text-slate-500">
                 Current Academic Year
               </p>
+
               <p className="mt-2 text-2xl font-bold text-slate-900">
                 {academicYear || "All"}
               </p>
@@ -1541,10 +1565,11 @@ export default function StudentsPage() {
               <p className="text-sm font-medium text-slate-500">
                 Current Page
               </p>
+
               <p className="mt-2 text-2xl font-bold text-slate-900">
-                {pagination.page || 1}
+                {pagination.page}
                 <span className="ml-1 text-base font-medium text-slate-400">
-                  / {pagination.totalPages || 1}
+                  / {pagination.totalPages}
                 </span>
               </p>
             </div>
@@ -1556,7 +1581,7 @@ export default function StudentsPage() {
         </div>
       </div>
 
-      {/* Directory */}
+      {/* Student directory */}
       <section className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="border-b border-slate-100 p-5 sm:p-6">
           <div className="flex flex-col justify-between gap-4 lg:flex-row lg:items-center">
@@ -1606,13 +1631,16 @@ export default function StudentsPage() {
 
               <select
                 value={academicYear}
-                onChange={(event) => {
-                  setSelectedAcademicYear(event.target.value);
-                  setPage(1);
-                }}
-                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+                onChange={(event) =>
+                  changeAcademicYear(event.target.value)
+                }
+                disabled={isTeacher && academicYears.length === 0}
+                className="rounded-xl border border-slate-200 bg-white px-3 py-2.5 text-sm text-slate-700 outline-none focus:border-blue-400 focus:ring-2 focus:ring-blue-100 disabled:cursor-not-allowed disabled:bg-slate-50"
               >
-                <option value="">All Academic Years</option>
+                {!isTeacher && (
+                  <option value="">All Academic Years</option>
+                )}
+
                 {academicYears.map((year) => (
                   <option key={year} value={year}>
                     {year}
@@ -1637,6 +1665,7 @@ export default function StudentsPage() {
               size={30}
               className="animate-spin text-blue-600"
             />
+
             <p className="text-sm text-slate-500">
               Loading students...
             </p>
@@ -1652,21 +1681,27 @@ export default function StudentsPage() {
             </h3>
 
             <p className="mt-1 max-w-sm text-sm text-slate-500">
-              {search || status || selectedAcademicYear
+              {search || status || academicYear
                 ? "Try changing your search or filters."
                 : "No students have been registered yet."}
             </p>
 
-            {canCreate && !search && !status && !selectedAcademicYear && (
-              <button
-                type="button"
-                onClick={() => setShowForm(true)}
-                className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
-              >
-                <UserPlus size={16} />
-                Register First Student
-              </button>
-            )}
+            {canCreate &&
+              !search &&
+              !status &&
+              !academicYear && (
+                <button
+                  type="button"
+                  onClick={() => {
+                    resetRegistrationForm();
+                    setShowForm(true);
+                  }}
+                  className="mt-4 inline-flex items-center gap-2 rounded-lg bg-blue-600 px-4 py-2 text-sm font-semibold text-white hover:bg-blue-700"
+                >
+                  <UserPlus size={16} />
+                  Register First Student
+                </button>
+              )}
           </div>
         ) : (
           <>
@@ -1701,7 +1736,9 @@ export default function StudentsPage() {
                             />
                           ) : (
                             <div className="flex h-10 w-10 items-center justify-center rounded-full bg-blue-50 text-sm font-bold text-blue-600">
-                              {student.firstName?.charAt(0)?.toUpperCase() || "S"}
+                              {student.firstName
+                                ?.charAt(0)
+                                ?.toUpperCase() || "S"}
                             </div>
                           )}
 
@@ -1709,6 +1746,7 @@ export default function StudentsPage() {
                             <p className="font-semibold text-slate-800">
                               {student.firstName} {student.lastName}
                             </p>
+
                             <p className="mt-0.5 text-xs text-slate-400">
                               {student.email || "No email"}
                             </p>
@@ -1724,6 +1762,7 @@ export default function StudentsPage() {
                         <p className="text-sm font-medium text-slate-700">
                           {student.className || "—"}
                         </p>
+
                         <p className="mt-0.5 text-xs text-slate-400">
                           {student.sectionName || "—"}
                         </p>
@@ -1758,7 +1797,9 @@ export default function StudentsPage() {
                           {canEdit && (
                             <button
                               type="button"
-                              onClick={() => handleEditStudent(student.id)}
+                              onClick={() =>
+                                handleEditStudent(student.id)
+                              }
                               disabled={saving}
                               className="inline-flex items-center gap-1.5 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
                             >
@@ -1790,7 +1831,9 @@ export default function StudentsPage() {
                       />
                     ) : (
                       <div className="flex h-12 w-12 shrink-0 items-center justify-center rounded-full bg-blue-50 font-bold text-blue-600">
-                        {student.firstName?.charAt(0)?.toUpperCase() || "S"}
+                        {student.firstName
+                          ?.charAt(0)
+                          ?.toUpperCase() || "S"}
                       </div>
                     )}
 
@@ -1816,8 +1859,10 @@ export default function StudentsPage() {
                       <p className="text-[11px] font-medium uppercase text-slate-400">
                         Class / Section
                       </p>
+
                       <p className="mt-1 text-sm font-medium text-slate-700">
-                        {student.className || "—"} / {student.sectionName || "—"}
+                        {student.className || "—"} /{" "}
+                        {student.sectionName || "—"}
                       </p>
                     </div>
 
@@ -1825,6 +1870,7 @@ export default function StudentsPage() {
                       <p className="text-[11px] font-medium uppercase text-slate-400">
                         Roll Number
                       </p>
+
                       <p className="mt-1 text-sm font-medium text-slate-700">
                         {student.rollNumber || "—"}
                       </p>
@@ -1834,6 +1880,7 @@ export default function StudentsPage() {
                       <p className="text-[11px] font-medium uppercase text-slate-400">
                         Phone
                       </p>
+
                       <p className="mt-1 text-sm text-slate-700">
                         {student.phone || "—"}
                       </p>
@@ -1852,7 +1899,9 @@ export default function StudentsPage() {
                     {canEdit && (
                       <button
                         type="button"
-                        onClick={() => handleEditStudent(student.id)}
+                        onClick={() =>
+                          handleEditStudent(student.id)
+                        }
                         disabled={saving}
                         className="inline-flex flex-1 items-center justify-center gap-2 rounded-lg border border-blue-200 bg-blue-50 px-3 py-2.5 text-xs font-semibold text-blue-700 transition hover:bg-blue-100 disabled:opacity-50"
                       >
@@ -1873,7 +1922,7 @@ export default function StudentsPage() {
             <p className="text-xs text-slate-500">
               Showing{" "}
               <span className="font-semibold text-slate-700">
-                {pagination.startItem ?? 0}–{pagination.endItem ?? 0}
+                {pagination.startItem}–{pagination.endItem}
               </span>{" "}
               of{" "}
               <span className="font-semibold text-slate-700">
@@ -1894,7 +1943,7 @@ export default function StudentsPage() {
               </button>
 
               <span className="px-2 text-xs font-medium text-slate-500">
-                Page {pagination.page || page} of {pagination.totalPages || 1}
+                Page {pagination.page} of {pagination.totalPages}
               </span>
 
               <button

@@ -7,6 +7,18 @@ const statement = {
 
   dashboard: ["read"],
 
+  // User account management: Super Admin only.
+  userManagement: [
+    "create",
+    "read",
+    "update",
+    "delete",
+    "assignRole",
+    "resetPassword",
+    "activate",
+    "deactivate",
+  ],
+
   students: ["create", "read", "update", "delete", "export", "promote"],
   guardians: ["create", "read", "update", "delete"],
   admissions: ["create", "read", "update", "approve", "reject"],
@@ -27,7 +39,6 @@ const statement = {
 
 export const ac = createAccessControl(statement);
 
-// Central permission definitions for all five roles.
 export const rolePermissionMap = {
   // 1. Super Admin: Full system access.
   superAdmin: Object.fromEntries(
@@ -37,13 +48,13 @@ export const rolePermissionMap = {
     ])
   ),
 
-  // 2. Principal: School leadership and student management.
+  // 2. Principal: Full teacher/staff management.
   principal: {
     dashboard: ["read"],
     students: ["create", "read", "update", "export"],
     guardians: ["read"],
     admissions: ["read", "approve", "reject"],
-    staff: ["read"],
+    staff: ["create", "read", "update", "delete"],
     academics: ["create", "read", "update", "assign"],
     attendance: ["mark", "read", "correct", "export"],
     fees: ["read"],
@@ -54,7 +65,7 @@ export const rolePermissionMap = {
     reports: ["read", "export"],
   },
 
-  // 3. Teacher: Student registration and assigned student access.
+  // 3. Teacher: Assigned student and academic access.
   teacher: {
     dashboard: ["read"],
     students: ["create", "read"],
@@ -78,13 +89,13 @@ export const rolePermissionMap = {
   },
 
   // 5. Accountant: Student records and financial management.
- accountant: {
-  dashboard: ["read"],
-  students: ["create", "read"],
-  academics: ["read"],
-  fees: [...statement.fees],
-  reports: ["read", "export"],
-},
+  accountant: {
+    dashboard: ["read"],
+    students: ["create", "read"],
+    academics: ["read"],
+    fees: [...statement.fees],
+    reports: ["read", "export"],
+  },
 };
 
 // Convert permission definitions into Better Auth roles.

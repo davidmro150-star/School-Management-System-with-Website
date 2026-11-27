@@ -1,4 +1,4 @@
-
+import { user } from "./auth-schema.js";
 import {
   pgTable,
   pgEnum,
@@ -1110,4 +1110,239 @@ export const teacherAssignments = pgTable(
     ).on(table.academicYear),
   })
 );
+
+
+// =====================================================
+// 17. TEACHER PROFILES
+// =====================================================
+
+export const teacherProfiles = pgTable(
+  "teacher_profiles",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    // Connects to the existing Better Auth account.
+    userId: text("user_id")
+      .notNull()
+      .unique()
+      .references(() => user.id, {
+        onDelete: "cascade",
+      }),
+
+    employeeId: varchar("employee_id", {
+      length: 50,
+    })
+      .notNull()
+      .unique(),
+
+    phone: varchar("phone", { length: 30 }).notNull(),
+
+    alternatePhone: varchar("alternate_phone", {
+      length: 30,
+    }),
+
+    gender: varchar("gender", { length: 30 }),
+
+    dateOfBirth: date("date_of_birth"),
+
+    joiningDate: date("joining_date").notNull(),
+
+    designation: varchar("designation", {
+      length: 100,
+    }).notNull().default("Teacher"),
+
+    qualification: varchar("qualification", {
+      length: 180,
+    }),
+
+    specialization: varchar("specialization", {
+      length: 180,
+    }),
+
+    experienceYears: integer("experience_years")
+      .notNull()
+      .default(0),
+
+    address: text("address"),
+
+    emergencyContactName: varchar(
+      "emergency_contact_name",
+      { length: 150 }
+    ),
+
+    emergencyContactPhone: varchar(
+      "emergency_contact_phone",
+      { length: 30 }
+    ),
+
+    employmentStatus: varchar("employment_status", {
+      length: 30,
+    })
+      .notNull()
+      .default("active"),
+
+    notes: text("notes"),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    deletedAt: timestamp("deleted_at", {
+      withTimezone: true,
+    }),
+  },
+  (table) => ({
+    employeeIdIndex: index(
+      "teacher_profiles_employee_id_idx"
+    ).on(table.employeeId),
+
+    statusIndex: index(
+      "teacher_profiles_status_idx"
+    ).on(table.employmentStatus),
+
+    joiningDateIndex: index(
+      "teacher_profiles_joining_date_idx"
+    ).on(table.joiningDate),
+  })
+);
+
+
+// =====================================================
+// 18. SCHOOL SUBJECTS
+// =====================================================
+
+export const subjects = pgTable(
+  "subjects",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    name: varchar("name", {
+      length: 150,
+    }).notNull(),
+
+    code: varchar("code", {
+      length: 50,
+    })
+      .notNull()
+      .unique(),
+
+    description: text("description"),
+
+    isActive: boolean("is_active")
+      .notNull()
+      .default(true),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    nameIndex: index(
+      "subjects_name_idx"
+    ).on(table.name),
+
+    activeIndex: index(
+      "subjects_active_idx"
+    ).on(table.isActive),
+  })
+);
+
+
+// =====================================================
+// 19. TEACHER SUBJECT ASSIGNMENTS
+// =====================================================
+
+export const teacherSubjectAssignments = pgTable(
+  "teacher_subject_assignments",
+  {
+    id: uuid("id").defaultRandom().primaryKey(),
+
+    teacherUserId: text("teacher_user_id")
+      .notNull()
+      .references(() => teacherProfiles.userId, {
+        onDelete: "cascade",
+      }),
+
+    subjectId: uuid("subject_id")
+      .notNull()
+      .references(() => subjects.id, {
+        onDelete: "restrict",
+      }),
+
+    classSectionId: uuid("class_section_id")
+      .notNull()
+      .references(() => classSections.id, {
+        onDelete: "restrict",
+      }),
+
+    academicYear: varchar("academic_year", {
+      length: 20,
+    }).notNull(),
+
+    isActive: boolean("is_active")
+      .notNull()
+      .default(true),
+
+    assignedAt: timestamp("assigned_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    createdAt: timestamp("created_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+
+    updatedAt: timestamp("updated_at", {
+      withTimezone: true,
+    })
+      .notNull()
+      .defaultNow(),
+  },
+  (table) => ({
+    assignmentUnique: uniqueIndex(
+      "teacher_subject_assignment_unique"
+    ).on(
+      table.teacherUserId,
+      table.subjectId,
+      table.classSectionId,
+      table.academicYear
+    ),
+
+    teacherIndex: index(
+      "teacher_subject_assignment_teacher_idx"
+    ).on(table.teacherUserId, table.isActive),
+
+    subjectIndex: index(
+      "teacher_subject_assignment_subject_idx"
+    ).on(table.subjectId, table.isActive),
+
+    sectionIndex: index(
+      "teacher_subject_assignment_section_idx"
+    ).on(table.classSectionId, table.isActive),
+
+    yearIndex: index(
+      "teacher_subject_assignment_year_idx"
+    ).on(table.academicYear),
+  })
+);
+
 

@@ -43,6 +43,13 @@
       "when": 1795722873760,
       "tag": "0005_sleepy_molten_man",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "7",
+      "when": 1795801969079,
+      "tag": "0006_illegal_guardian",
+      "breakpoints": true
     }
   ]
 }
